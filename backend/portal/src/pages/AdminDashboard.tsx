@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/auth';
+import { getApiUrl, API_CONFIG } from '../config/api';
 import { LogOut, Key, Search, Activity, MonitorSmartphone, Calendar, PlusCircle, Trash2 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -15,7 +16,7 @@ export default function AdminDashboard() {
 
   const fetchLicenses = async () => {
     try {
-      const res = await fetch('/api/portal/admin/licenses', authHeaders);
+      const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ADMIN_LICENSES), authHeaders);
       const data = await res.json();
       setLicenses(data);
     } catch (err) {
@@ -33,7 +34,7 @@ export default function AdminDashboard() {
     if (!confirm('Generate a new license key?')) return;
     setGenerating(true);
     try {
-      await fetch('/api/portal/admin/licenses/generate', { method: 'POST', ...authHeaders });
+      await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ADMIN_GENERATE_LICENSE), { method: 'POST', ...authHeaders });
       fetchLicenses();
     } catch (err) {
       alert('Failed to generate key');
@@ -47,7 +48,7 @@ export default function AdminDashboard() {
     setPurging(true);
     setPurgeResult(null);
     try {
-      const res = await fetch('/api/portal/admin/purge-duplicates', { method: 'POST', ...authHeaders });
+      const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ADMIN_PURGE_DUPLICATES), { method: 'POST', ...authHeaders });
       const data = await res.json();
       if (data.success) {
         setPurgeResult(`Deleted ${data.deleted} duplicate record(s). Revenue totals are now accurate.`);

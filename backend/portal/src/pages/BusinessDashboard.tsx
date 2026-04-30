@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/auth';
-import { 
-  LogOut, DollarSign, ShoppingCart, RefreshCw, TrendingUp, 
+import { getApiUrl, API_CONFIG } from '../config/api';
+import {
+  LogOut, DollarSign, ShoppingCart, RefreshCw, TrendingUp,
   Package, BarChart3, LayoutDashboard, Search
 } from 'lucide-react';
-import { 
+import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
@@ -36,7 +37,7 @@ export default function BusinessDashboard() {
 
   const fetchDashboard = async () => {
     try {
-      const res = await fetch(`/api/portal/dashboard/summary`, authHeaders);
+      const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.DASHBOARD_SUMMARY), authHeaders);
       if (!res.ok) throw new Error('Session expired');
       const summary = await res.json();
       setDashboardData(summary);
@@ -50,7 +51,7 @@ export default function BusinessDashboard() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '50' });
       if (search) params.set('search', search);
-      const res = await fetch(`/api/portal/inventory?${params}`, authHeaders);
+      const res = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.INVENTORY}?${params}`), authHeaders);
       if (!res.ok) throw new Error('Session expired');
       const data = await res.json();
       setInventory(data.products || []);

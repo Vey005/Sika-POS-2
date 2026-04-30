@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/auth';
+import { getApiUrl, API_CONFIG } from '../config/api';
 import {
   Package,
   Search,
@@ -52,7 +53,7 @@ export default function Inventory() {
       if (categoryFilter) params.set('category', categoryFilter);
       if (stockFilter !== 'all') params.set('stock', stockFilter);
 
-      const res = await fetch(`/api/portal/inventory?${params}`, {
+      const res = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.INVENTORY}?${params}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch inventory');

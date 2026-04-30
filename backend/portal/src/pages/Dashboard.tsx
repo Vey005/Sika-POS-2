@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/auth';
 import StatCard from '../components/StatCard';
+import { getApiUrl, API_CONFIG } from '../config/api';
 import {
   DollarSign,
   ShoppingCart,
@@ -121,7 +122,7 @@ export default function Dashboard() {
       params.set('from', fromDate.toISOString());
       params.set('to', toDate.toISOString());
       
-      const res = await fetch(`/api/portal/dashboard/summary?${params}`, {
+      const res = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.DASHBOARD_SUMMARY}?${params}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {

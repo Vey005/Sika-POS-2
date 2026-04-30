@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/auth';
+import { getApiUrl, API_CONFIG } from '../config/api';
 import {
   Receipt,
   Search,
@@ -88,7 +89,7 @@ export default function Transactions() {
       if (dateTo) params.set('to', dateTo);
       if (paymentFilter) params.set('payment', paymentFilter);
 
-      const res = await fetch(`/api/portal/sales?${params}`, {
+      const res = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.SALES}?${params}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch transactions');
