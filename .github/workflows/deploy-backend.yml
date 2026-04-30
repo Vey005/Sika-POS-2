@@ -1,0 +1,52 @@
+name: Deploy Backend API
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '!backend/portal/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install dependencies
+      run: cd backend && npm ci
+
+    - name: Build Docker image
+      run: cd backend && docker build -t sikapos-api .
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Push to Docker Hub
+      run: |
+        docker tag sikapos-api ${{ secrets.DOCKERHUB_USERNAME }}/sikapos-api:latest
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/sikapos-api:latest
+
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          cd /opt/sikapos
+          docker-compose pull
+          docker-compose up -d api
