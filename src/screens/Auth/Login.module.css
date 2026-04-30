@@ -1,0 +1,210 @@
+.container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(212,160,23,0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 80%, rgba(59,130,246,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  padding: var(--space-10) var(--space-8);
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  animation: slideUp 0.5s var(--spring) both;
+  box-shadow: var(--shadow-lg), 0 0 60px rgba(212,160,23,0.05);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card.shake {
+  animation: shake 0.5s ease;
+}
+
+.logoArea {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.logoRing {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid var(--color-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-gold-dim);
+  box-shadow: var(--shadow-gold);
+  animation: glow 3s ease infinite;
+}
+
+.logoSymbol {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  color: var(--color-gold);
+  font-weight: 500;
+}
+
+.appName {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 5px;
+  color: var(--color-text-primary);
+}
+
+.businessName {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-family: var(--font-body);
+}
+
+.pinDots {
+  display: flex;
+  gap: var(--space-4);
+  height: 20px;
+  align-items: center;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-strong);
+  background: transparent;
+  transition: all var(--transition-normal) var(--spring);
+}
+
+.dotFilled {
+  background: var(--color-gold);
+  border-color: var(--color-gold);
+  box-shadow: 0 0 8px rgba(212,160,23,0.5);
+  transform: scale(1.2);
+}
+
+.dotError {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+}
+
+.errorText {
+  color: var(--color-danger);
+  font-size: 12px;
+  text-align: center;
+  animation: fadeIn 0.2s ease;
+  margin-top: -var(--space-3);
+}
+
+.numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.numBtn {
+  height: 60px;
+  border: 1px solid var(--color-border);
+  background: var(--color-elevated);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.numBtn:hover {
+  background: var(--color-overlay);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+.numBtn:active {
+  transform: scale(0.94);
+  background: var(--color-gold-dim);
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+}
+
+.numEmpty {
+  height: 60px;
+}
+
+.backspaceBtn {
+  color: var(--color-text-muted);
+}
+
+.backspaceBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.version {
+  position: absolute;
+  bottom: var(--space-6);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.5px;
+}
+
+.exitBtn {
+  position: absolute;
+  top: var(--space-6);
+  right: var(--space-6);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  z-index: 10;
+}
+
+.exitBtn:hover {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}

@@ -1,0 +1,180 @@
+.overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-6);
+}
+
+.modal {
+  background: var(--color-bg);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.modalHeader {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modalTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+  background: rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.reportContainer {
+  background: #fff;
+  color: #000;
+  padding: 40px 20px;
+  width: 100%;
+  max-width: 380px; /* Simulate 80mm paper */
+  margin: 0 auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.businessName {
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.reportTitle {
+  font-size: 15px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.reportDate {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.divider {
+  border-bottom: 1px dashed #000;
+  margin: 12px 0;
+}
+
+.sectionTitle {
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.transactionList {
+  font-size: 11px;
+}
+
+.txHeader {
+  display: flex;
+  font-weight: bold;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #000;
+}
+
+.txRow {
+  display: flex;
+  margin-bottom: 2px;
+}
+
+.colReceipt { flex: 2; overflow: hidden; white-space: nowrap; }
+.colTime { flex: 1; text-align: center; }
+.colMethod { flex: 1.5; text-align: center; }
+.colTotal { flex: 1.5; text-align: right; }
+
+.footer {
+  text-align: center;
+  font-size: 11px;
+  margin-top: 20px;
+  color: #666;
+}
+
+.modalFooter {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  background: var(--color-surface);
+}
+
+.cancelBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.printBtn {
+  background: var(--color-gold);
+  color: #000;
+  border: none;
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.printBtn:hover {
+  background: #EBB51E;
+}
+
+.savePdfBtn {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.savePdfBtn:hover {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
