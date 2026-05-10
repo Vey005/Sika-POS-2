@@ -135,7 +135,7 @@ export default function Transactions() {
       cash: { bg: 'rgba(16,185,129,0.1)', color: '#10B981' },
       momo: { bg: 'rgba(139,92,246,0.1)', color: '#8B5CF6' },
       card: { bg: 'rgba(59,130,246,0.1)', color: '#3B82F6' },
-      credit: { bg: 'rgba(245,158,11,0.1)', color: '#F59E0B' },
+      credit: { bg: 'rgba(249, 115, 22, 0.1)', color: '#FB923C' },
     };
     const style = styles[method] || { bg: 'rgba(255,255,255,0.1)', color: 'var(--text-muted)' };
     return (
@@ -317,6 +317,7 @@ export default function Transactions() {
                     <th style={{ padding: '16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>Cashier</th>
                     <th style={{ padding: '16px', textAlign: 'center', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>Payment</th>
                     <th style={{ padding: '16px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>Total</th>
+                    <th style={{ padding: '16px', textAlign: 'center', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>Status</th>
                     <th style={{ padding: '16px', textAlign: 'center', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>Action</th>
                   </tr>
                 </thead>
@@ -334,6 +335,24 @@ export default function Transactions() {
                       <td style={{ padding: '16px', textAlign: 'center' }}>{paymentBadge(tx.payment_method)}</td>
                       <td style={{ padding: '16px', textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
                         {formatCurrency(tx.grand_total)}
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          background: tx.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 
+                                     tx.status === 'voided' ? 'rgba(239, 68, 68, 0.1)' : 
+                                     tx.status === 'debt' ? 'rgba(249, 115, 22, 0.1)' :
+                                     'rgba(245, 158, 11, 0.1)',
+                          color: tx.status === 'completed' ? '#10B981' : 
+                                 tx.status === 'voided' ? '#EF4444' : 
+                                 tx.status === 'debt' ? '#FB923C' :
+                                 '#F59E0B',
+                        }}>
+                          {tx.status === 'debt' ? 'Owes' : tx.status}
+                        </span>
                       </td>
                       <td style={{ padding: '16px', textAlign: 'center' }}>
                         <button

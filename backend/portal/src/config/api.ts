@@ -10,7 +10,8 @@ export const API_CONFIG = {
     SALES: '/api/portal/sales',
     ADMIN_LICENSES: '/api/portal/admin/licenses',
     ADMIN_GENERATE_LICENSE: '/api/portal/admin/licenses/generate',
-    ADMIN_PURGE_DUPLICATES: '/api/portal/admin/purge-duplicates'
+    ADMIN_PURGE_DUPLICATES: '/api/portal/admin/purge-duplicates',
+    ADMIN_SUPER_ADMINS: '/api/portal/admin/super-admins'
   }
 };
 

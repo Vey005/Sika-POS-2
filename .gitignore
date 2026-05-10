@@ -40,3 +40,17 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Secrets / credentials — never commit
+backend/license_keys.txt
+backend/production_license_keys.txt
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local debug/scratch scripts
+scratch/
+check_db.js
+check_local_db.js
+backend/check_db.js

@@ -6,7 +6,7 @@ import styles from './Login.module.css';
 
 export default function SetupScreen() {
   const [step, setStep] = useState<1 | 2>(1);
-  const { setSetupComplete, setBusinessInfo } = useAuthStore();
+  const { setSetupComplete, setBusinessInfo, setBusinessLogo } = useAuthStore();
   const navigate = useNavigate();
 
   // Step 1: Business info
@@ -23,6 +23,29 @@ export default function SetupScreen() {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Pre-populate if data exists from activation
+  useState(() => {
+    const loadProfile = async () => {
+      if (window.sikapos?.secureStore) {
+        const name = await window.sikapos.secureStore.get('business_name');
+        const addr = await window.sikapos.secureStore.get('business_address');
+        const phone = await window.sikapos.secureStore.get('business_phone');
+        const logo = await window.sikapos.secureStore.get('business_logo');
+
+        if (name) {
+          setBusinessName(name);
+          if (addr) setBusinessAddress(addr);
+          if (phone) setBusinessPhone(phone);
+          if (logo) setLogoPreview(logo);
+          
+          // Auto-skip to Step 2 if name is already set (returning company)
+          setStep(2);
+        }
+      }
+    };
+    loadProfile();
+  });
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -161,60 +161,7 @@ export default function ReportsScreen() {
     }
   };
 
-  const handleSendReport = async () => {
-    if (!window.sikapos || !summary) return;
-    
-    setLoading(true);
-    try {
-      const biz = await window.sikapos.settings.getBusiness();
-      const phone = biz.owner_whatsapp;
-      
-      if (!phone) {
-        alert('Please set the Daily Report Phone Number in Settings → Business first.');
-        return;
-      }
 
-      const dateStr = dateRange.from || today;
-      const smsMessage = [
-        `SikaPOS Daily Report`,
-        `${businessName}`,
-        `Date: ${dateStr}`,
-        ``,
-        `Revenue: GHS ${formatCurrency(summary.total_revenue)}`,
-        `Transactions: ${summary.transaction_count}`,
-        `Avg Basket: GHS ${formatCurrency(summary.avg_basket)}`,
-        ``,
-        `Payment Breakdown:`,
-        `Cash: GHS ${formatCurrency(summary.cash_total)}`,
-        `MoMo: GHS ${formatCurrency(summary.momo_total)}`,
-        `Card: GHS ${formatCurrency(summary.card_total)}`,
-        `Credit: GHS ${formatCurrency(summary.credit_total)}`,
-        ``,
-        `Generated via SikaPOS.`
-      ].join('\n');
-
-      // Send via official SMS gateway
-      const res = await window.sikapos.notifications.sendOfficial(phone, smsMessage);
-      
-      if (res.success) {
-        alert(`✅ Daily report sent successfully to ${phone}!`);
-      } else {
-        // SMS failed — show error, offer WhatsApp fallback
-        const useWhatsApp = confirm(
-          `SMS delivery failed: ${res.message || 'Unknown error'}\n\nWould you like to send via WhatsApp instead?`
-        );
-        if (useWhatsApp) {
-          const waMessage = `📊 *SikaPOS Daily Report*\n🏢 *${businessName}*\n📅 Date: ${dateStr}\n\n💰 *Revenue:* GHS ${formatCurrency(summary.total_revenue)}\n🛒 *Transactions:* ${summary.transaction_count}\n🧺 *Avg Basket:* GHS ${formatCurrency(summary.avg_basket)}\n\n💳 *Payment Breakdown:*\n- Cash: GHS ${formatCurrency(summary.cash_total)}\n- MoMo: GHS ${formatCurrency(summary.momo_total)}\n- Card: GHS ${formatCurrency(summary.card_total)}\n- Credit: GHS ${formatCurrency(summary.credit_total)}\n\n✅ *Total Sales Summary generated via SikaPOS.*`;
-          const whatsappUrl = `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(waMessage)}`;
-          window.open(whatsappUrl, '_blank');
-        }
-      }
-    } catch (err: any) {
-      alert('Failed to send report: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const paymentMethodLabel = (method: string) => {
     const map: Record<string, string> = {
@@ -237,18 +184,7 @@ export default function ReportsScreen() {
         </div>
         {activeTab === 'sales' && (
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              className={styles.shareWhatsAppBtn} 
-              onClick={handleSendReport}
-              disabled={loading || !summary}
-              title="Send professional sales summary to owner"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-              </svg>
-              Send Official Report
-            </button>
+
             <button 
               className={styles.printReportBtn} 
               onClick={handlePrintEOD}
@@ -339,8 +275,13 @@ export default function ReportsScreen() {
                         <td>{paymentMethodLabel(tx.payment_method)}</td>
                         <td className={styles.totalCell}>GHS {formatCurrency(tx.grand_total)}</td>
                         <td>
-                          <span className={`${styles.statusBadge} ${tx.status === 'voided' ? styles.statusVoided : tx.status === 'reversed' ? styles.statusReversed : styles.statusCompleted}`}>
-                            {tx.status}
+                          <span className={`${styles.statusBadge} ${
+                            tx.status === 'voided' ? styles.statusVoided : 
+                            tx.status === 'reversed' ? styles.statusReversed : 
+                            tx.status === 'debt' ? styles.statusDebt : 
+                            styles.statusCompleted
+                          }`}>
+                            {tx.status === 'debt' ? 'Owes' : tx.status}
                           </span>
                         </td>
                         <td>

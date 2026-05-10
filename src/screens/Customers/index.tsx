@@ -11,6 +11,12 @@ export default function CustomersScreen() {
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<CustomerWithHistory | null>(null);
 
+  const [payAmount, setPayAmount] = useState('');
+  const [payMethod, setPayMethod] = useState<'cash' | 'momo' | 'card'>('cash');
+  const [payNote, setPayNote] = useState('');
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [payCustomer, setPayCustomer] = useState<Customer | null>(null);
+
   const load = useCallback(async () => {
     if (!window.sikapos) return;
     setLoading(true);
@@ -50,6 +56,45 @@ export default function CustomersScreen() {
 
   const totalDebt = customers.reduce((s, c) => s + c.credit_balance, 0);
   const totalLoyalty = customers.reduce((s, c) => s + c.loyalty_points, 0);
+
+  const handlePayment = async () => {
+    if (!payCustomer || !payAmount || !window.sikapos) return;
+
+    const amount = parseFloat(payAmount);
+
+    // Overpayment warning
+    if (amount > payCustomer.credit_balance) {
+      const confirmed = window.confirm(
+        `Payment amount (GHS ${amount.toFixed(2)}) exceeds outstanding balance (GHS ${payCustomer.credit_balance.toFixed(2)}).\n\nContinue anyway?`
+      );
+      if (!confirmed) return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await window.sikapos.customers.addCreditPayment(payCustomer.id, amount, payNote, payMethod);
+      if (res.success) {
+        // Immediately update the displayed customer with new balance
+        const updatedCustomer = res.customer;
+        if (updatedCustomer) {
+          setPayCustomer(updatedCustomer);
+          // Update the customers list
+          setCustomers(prev => prev.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
+          // Update the selected profile view if it's the same customer
+          if (selected && selected.id === updatedCustomer.id) {
+            setSelected({ ...selected, ...updatedCustomer });
+          }
+        }
+        // Then reload all data to ensure consistency
+        await load();
+        setShowPayModal(false);
+        setPayAmount('');
+        setPayNote('');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className={styles.screen}>
@@ -127,13 +172,76 @@ export default function CustomersScreen() {
                 </td>
                 <td className={styles.monoCell}>{c.loyalty_points} pts</td>
                 <td>
-                  <button className={styles.viewBtn} onClick={() => openProfile(c.id)}>View</button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className={styles.viewBtn} onClick={() => openProfile(c.id)}>View</button>
+                    {c.credit_balance > 0 && (
+                      <button 
+                        className={styles.payBtn} 
+                        style={{ background: 'var(--color-success)', color: '#000', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                        onClick={() => { setPayCustomer(c); setPayAmount(c.credit_balance.toString()); setShowPayModal(true); }}
+                      >
+                        Pay Debt
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Payment Modal */}
+      {showPayModal && payCustomer && (
+        <div className={styles.overlay} onClick={e => e.target === e.currentTarget && setShowPayModal(false)}>
+          <div className={styles.modal} style={{ maxWidth: '400px' }}>
+            <div className={styles.modalHeader}>
+              <h2>Record Payment: {payCustomer.name}</h2>
+              <button className={styles.closeBtn} onClick={() => setShowPayModal(false)}>×</button>
+            </div>
+            <div className={styles.modalBody}>
+              <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', marginBottom: '16px', textAlign: 'center' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Outstanding Balance</p>
+                <p style={{ fontSize: '24px', fontWeight: '700', color: 'var(--color-danger)' }}>GHS {formatCurrency(payCustomer.credit_balance)}</p>
+              </div>
+              <div className={styles.formField}>
+                <label>Amount to Pay (GHS) *</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={payAmount} 
+                  onChange={e => setPayAmount(e.target.value)} 
+                  placeholder="0.00" 
+                  autoFocus
+                />
+              </div>
+              <div className={styles.formField}>
+                <label>Payment Method</label>
+                <select value={payMethod} onChange={e => setPayMethod(e.target.value as any)}>
+                  <option value="cash">Cash</option>
+                  <option value="momo">MoMo</option>
+                  <option value="card">Card</option>
+                </select>
+              </div>
+              <div className={styles.formField}>
+                <label>Notes (optional)</label>
+                <input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. Partial payment for receipt #..." />
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <button className={styles.cancelBtn} onClick={() => setShowPayModal(false)}>Cancel</button>
+              <button 
+                className={styles.saveBtn} 
+                style={{ background: 'var(--color-success)', color: '#000' }}
+                onClick={handlePayment} 
+                disabled={saving || !payAmount || parseFloat(payAmount) <= 0}
+              >
+                {saving ? 'Processing...' : 'Confirm Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit form */}
       {showForm && editCustomer && (
@@ -159,6 +267,17 @@ export default function CustomersScreen() {
               <div className={styles.formField}>
                 <label>Notes</label>
                 <input value={editCustomer.notes || ''} onChange={e => setEditCustomer(p => ({ ...p!, notes: e.target.value }))} placeholder="Any notes about this customer" />
+              </div>
+              <div className={styles.formField}>
+                <label>Credit Limit (GHS) <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>0 = No limit</span></label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editCustomer.credit_limit ?? 0}
+                  onChange={e => setEditCustomer(p => ({ ...p!, credit_limit: parseFloat(e.target.value) || 0 }))}
+                  placeholder="0.00"
+                />
               </div>
             </div>
             <div className={styles.modalFooter}>
@@ -187,6 +306,10 @@ export default function CustomersScreen() {
                 </div>
                 <div>
                   <p className={styles.statLabel}>Credit Balance</p>
+                  </div>
+                  <div>
+                    <p className={styles.statLabel}>Credit Limit</p>
+                    <p className={`${styles.statBig} ${selected.credit_limit && selected.credit_limit > 0 ? styles.danger : ''}`}>GHS {formatCurrency(selected.credit_limit ?? 0)}</p>
                   <p className={`${styles.statBig} ${selected.credit_balance > 0 ? styles.danger : ''}`}>
                     GHS {formatCurrency(selected.credit_balance)}
                   </p>
@@ -196,9 +319,21 @@ export default function CustomersScreen() {
                   <p className={styles.statBig}>{selected.loyalty_points} pts</p>
                 </div>
               </div>
-              <p className={styles.sectionLabel}>Recent Sales</p>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <p className={styles.sectionLabel}>Recent Transactions</p>
+                {selected.credit_balance > 0 && (
+                  <button 
+                    style={{ background: 'var(--color-success)', color: '#000', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                    onClick={() => { setPayCustomer(selected); setPayAmount(selected.credit_balance.toString()); setShowPayModal(true); }}
+                  >
+                    Pay Debt
+                  </button>
+                )}
+              </div>
+
               {selected.recentSales.length === 0 ? (
-                <p style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>No sales yet</p>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>No transactions yet</p>
               ) : selected.recentSales.map(tx => (
                 <div key={tx.id} className={styles.txRow}>
                   <div>
@@ -215,3 +350,4 @@ export default function CustomersScreen() {
     </div>
   );
 }
+

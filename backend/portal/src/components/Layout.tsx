@@ -7,12 +7,14 @@ import {
   LogOut,
   Menu,
   X,
-  Store
+  Store,
+  Users
 } from 'lucide-react';
 
 const navItems = [
   { path: '/reports', label: 'Reports', icon: BarChart3 },
   { path: '/inventory', label: 'Inventory', icon: Package },
+  { path: '/customers', label: 'Customers', icon: Users },
 ];
 
 export default function Layout() {
@@ -29,6 +31,7 @@ export default function Layout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)' }}>
       {/* Mobile Sidebar Overlay */}
       <div
+        className="no-print"
         style={{
           position: 'fixed',
           inset: 0,
@@ -42,6 +45,7 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside
+        className="no-print"
         style={{
           width: sidebarOpen ? 'min(260px, 80vw)' : '0',
           maxWidth: '260px',
@@ -129,6 +133,7 @@ export default function Layout() {
       }}>
         {/* Mobile Header */}
         <header
+          className="no-print"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -210,8 +215,9 @@ export default function Layout() {
         {/* Page Content */}
         <div style={{ 
           padding: 'clamp(16px, 4vw, 24px) clamp(12px, 3vw, 20px)', 
-          maxWidth: '1400px', 
+          maxWidth: '1800px', 
           margin: '0 auto',
+          width: '100%',
           flex: 1,
         }}>
           <Outlet />

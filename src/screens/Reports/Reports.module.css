@@ -181,8 +181,17 @@
   letter-spacing: 0.5px;
 }
 
-.statusCompleted { background: var(--color-success-dim); color: var(--color-success); }
-.statusVoided { background: var(--color-danger-dim); color: var(--color-danger); }
+.statusCompleted {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.statusDebt {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}
+
+.statusVoided, .statusReversed { background: var(--color-danger-dim); color: var(--color-danger); }
 .statusReversed { background: var(--color-warning-dim); color: var(--color-warning); }
 
 .voidBtn {

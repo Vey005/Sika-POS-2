@@ -156,6 +156,15 @@ export function registerSalesHandlers() {
       }
     } else if (!data.customer_id) {
       throw new Error('Customer selection is required for credit sales.');
+    } else {
+      // Credit sale: Validate credit limit
+      const customer = db.prepare('SELECT credit_balance, credit_limit FROM customers WHERE id = ?').get(data.customer_id) as { credit_balance: number; credit_limit: number } | undefined;
+      if (customer && customer.credit_limit > 0) {
+        const projectedBalance = customer.credit_balance + grandTotal;
+        if (projectedBalance > customer.credit_limit) {
+          throw new Error(`Credit limit exceeded. Current balance: GHS ${customer.credit_balance.toFixed(2)}, Limit: GHS ${customer.credit_limit.toFixed(2)}, This sale: GHS ${grandTotal.toFixed(2)}, Projected: GHS ${projectedBalance.toFixed(2)}`);
+        }
+      }
     }
 
     const changeGiven = round2(Math.max(0, (data.amount_tendered || grandTotal) - grandTotal));
@@ -163,23 +172,26 @@ export function registerSalesHandlers() {
 
     // Atomic transaction
     const createTx = db.transaction(() => {
+      const status = data.payment_method === 'credit' ? 'debt' : 'completed';
+      const paidAmount = data.payment_method === 'credit' ? 0 : grandTotal;
+
       const txResult = db.prepare(`
         INSERT INTO transactions (
           receipt_number, customer_id, customer_name, cashier_name, status, payment_method,
           subtotal, discount_amount, discount_type, tax_vat, tax_nhil, tax_getfund, tax_covid,
-          total_tax, grand_total, amount_tendered, change_given, momo_reference
-        ) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          total_tax, grand_total, amount_tendered, change_given, momo_reference, paid_amount
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         receiptNumber, data.customer_id || null, data.customer_name || null,
-        data.cashier_name || 'Cashier', data.payment_method,
+        data.cashier_name || 'Cashier', status, data.payment_method,
         round2(subtotal), round2(data.discount_amount || 0), data.discount_type || null,
         tax.vat, tax.nhil, tax.getfund, tax.covid,
         tax.totalTax, grandTotal,
         round2(data.amount_tendered || grandTotal), changeGiven,
-        data.momo_reference || null
+        data.momo_reference || null, paidAmount
       );
 
-      const transactionId = txResult.lastInsertRowid as number;
+      const transactionId = Number(txResult.lastInsertRowid);
 
       // Insert items and deduct stock
       for (const item of data.items) {
@@ -226,6 +238,13 @@ export function registerSalesHandlers() {
             WHERE id = ?
           `).run(grandTotal, Math.floor(grandTotal), data.customer_id);
         }
+
+        // Push updated customer to sync queue
+        const updatedCustomer = db.prepare(`SELECT * FROM customers WHERE id = ?`).get(data.customer_id);
+        db.prepare(`
+          INSERT INTO sync_queue (entity, operation, payload, status, priority)
+          VALUES ('customer', 'update', ?, 'pending', 5)
+        `).run(JSON.stringify({ ...updatedCustomer as object, local_id: data.customer_id }));
       }
 
       // Get the actual transaction timestamp from database
@@ -240,12 +259,14 @@ export function registerSalesHandlers() {
         customer_name: data.customer_name || null,
         cashier_name: data.cashier_name,
         payment_method: data.payment_method,
+        status: status,
         subtotal: round2(subtotal),
         discount_amount: round2(data.discount_amount || 0),
         tax: tax,
         grand_total: grandTotal,
         amount_tendered: round2(data.amount_tendered || grandTotal),
         change_given: changeGiven,
+        paid_amount: paidAmount,
         created_at: txCreatedAt,
         items: data.items.map(i => ({
           product_id: i.product_id,
@@ -337,8 +358,8 @@ export function registerSalesHandlers() {
 
           db.prepare(`
             INSERT INTO credit_log (customer_id, transaction_id, amount, type, note)
-            VALUES (?, ?, ?, 'payment', ?)
-          `).run(tx.customer_id, id, tx.grand_total, `Transaction ${newStatus}: ${reason}`);
+            VALUES (?, ?, ?, 'void', ?)
+          `).run(tx.customer_id, id, tx.grand_total, `Transaction voided: ${reason}`);
         } else {
           db.prepare(`
             UPDATE customers SET
@@ -370,30 +391,94 @@ export function registerSalesHandlers() {
     let sql = `
       SELECT
         COUNT(*) as transaction_count,
-        COALESCE(SUM(grand_total), 0) as total_revenue,
-        COALESCE(AVG(grand_total), 0) as avg_basket,
+        COALESCE(SUM(paid_amount), 0) as total_revenue,
+        COALESCE(AVG(paid_amount), 0) as avg_basket,
         COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total ELSE 0 END), 0) as cash_total,
         COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total ELSE 0 END), 0) as momo_total,
-        COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total ELSE 0 END), 0) as credit_total
+        COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0) as card_total,
+        COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total - paid_amount ELSE 0 END), 0) as credit_issued_total
       FROM transactions
-      WHERE status = 'completed'
+      WHERE status IN ('completed', 'debt') AND (status != 'voided' AND status != 'reversed')
     `;
     const params: string[] = [];
     
-    if (filters?.from) {
-      sql += " AND created_at >= ?";
-      params.push(`${filters.from} 00:00:00`);
-    } else if (!filters?.to) {
-      // Default to today if no range provided
+    // If no filters provided, default to today's transactions
+    if (!filters || (!filters.from && !filters.to)) {
       sql += " AND created_at >= date('now', 'start of day')";
+    } else {
+      // Apply explicit date range if provided
+      if (filters.from) {
+        sql += " AND created_at >= ?";
+        params.push(`${filters.from} 00:00:00`);
+      }
+      if (filters.to) {
+        sql += " AND created_at <= ?";
+        params.push(`${filters.to} 23:59:59`);
+      }
     }
 
-    if (filters?.to) {
-      sql += " AND created_at <= ?";
-      params.push(`${filters.to} 23:59:59`);
-    }
+    // 0. LOCAL CLEANUP: Remove duplicate credit_payments (handling sync retries or double-clicks)
+    // Keep only the oldest one for each amount/timestamp pair
+    db.prepare(`
+      DELETE FROM credit_payments 
+      WHERE id NOT IN (
+        SELECT MIN(id) 
+        FROM credit_payments 
+        GROUP BY amount, created_at, customer_id
+      )
+    `).run();
 
-    return db.prepare(sql).get(...params);
+
+
+    const summary = db.prepare(sql).get(...params) as any;
+    
+    // DEBUG LOGS
+    const licenseKey = db.prepare(`SELECT value FROM settings WHERE key = 'license_key'`).pluck().get() as string;
+    const totalCount = db.prepare("SELECT COUNT(*) as count FROM credit_payments").get() as { count: number };
+    const latestPayment = db.prepare("SELECT created_at FROM credit_payments ORDER BY created_at DESC LIMIT 1").get() as any;
+    
+    console.log(`[DEBUG] License=${licenseKey}, credit_payments stats: Total Rows=${totalCount.count}, Latest Date=${latestPayment?.created_at || 'None'}`);
+    console.log(`[DEBUG] System Date: ${new Date().toISOString().split('T')[0]}`);
+
+    // 1. Get payments for the current period (must match transaction filter logic)
+    let paymentSql = `SELECT COALESCE(SUM(amount), 0) as total FROM credit_payments`;
+    const paymentParams: string[] = [];
+    
+    if (!filters || (!filters.from && !filters.to)) {
+      // Default to today's payments
+      paymentSql += " WHERE created_at >= date('now', 'start of day')";
+    } else {
+      // Apply explicit date range if provided
+      if (filters.from) {
+        paymentSql += " WHERE created_at >= ?";
+        paymentParams.push(`${filters.from} 00:00:00`);
+      }
+      if (filters.to) {
+        paymentSql += filters.from ? " AND created_at <= ?" : " WHERE created_at <= ?";
+        paymentParams.push(`${filters.to} 23:59:59`);
+      }
+    }
+    
+    const payments = db.prepare(paymentSql).get(...paymentParams) as { total: number };
+    console.log(`[DEBUG] Payments for period: query=${paymentSql}, params=${JSON.stringify(paymentParams)}, result=${payments.total}`);
+
+    // 2. Revenue Recognition
+    // total_revenue now uses paid_amount column which attributes revenue to the original date of sale.
+    // realizedSales and total_revenue are effectively the same in this model.
+    summary.total_revenue = Number(summary.total_revenue) || 0;
+    summary.debt_recovered = Number(payments.total) || 0;
+
+    // Credit for THIS period: use the date-filtered credit_issued_total from the SQL query
+    // This shows credit issued during the selected date range, not all-time debt
+    summary.credit_total = Number(summary.credit_issued_total) || 0;
+
+    // Outstanding credit: Total all-time customer debt (separate field for display)
+    const totalDebtResult = db.prepare("SELECT COALESCE(SUM(credit_balance), 0) as total FROM customers").get() as { total: number };
+    summary.outstanding_credit = Number(totalDebtResult.total) || 0;
+
+    console.log(`[IPC] Calculated Realized Revenue: ${summary.total_revenue} (Credit Issued Today: ${summary.credit_total}, Outstanding Credit: ${summary.outstanding_credit})`);
+
+    return summary;
   });
 
   ipcMain.handle('sales:getRecentTransactions', (_event, limit: number) => {
@@ -412,21 +497,35 @@ export function registerSalesHandlers() {
       const summary = db.prepare(`
         SELECT
           COUNT(*) as transaction_count,
-          COALESCE(SUM(grand_total), 0) as total_revenue,
+          COALESCE(SUM(paid_amount), 0) as total_revenue,
           COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total ELSE 0 END), 0) as cash_total,
           COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total ELSE 0 END), 0) as momo_total,
           COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0) as card_total,
-          COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total ELSE 0 END), 0) as credit_total
+          COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total - paid_amount ELSE 0 END), 0) as credit_total
         FROM transactions
-        WHERE status = 'completed'
+        WHERE status IN ('completed', 'debt')
           AND created_at LIKE ?
-      `).get(`${date}%`);
+      `).get(`${date}%`) as any;
+
+      const payments = db.prepare(`
+        SELECT COALESCE(SUM(amount), 0) as total FROM credit_payments
+        WHERE created_at LIKE ?
+      `).get(`${date}%`) as { total: number };
+
+      const totalOutstanding = db.prepare(`SELECT COALESCE(SUM(credit_balance), 0) as total FROM customers`).get() as { total: number };
+
+      if (summary) {
+        summary.debt_recovered = payments.total;
+        summary.credit_total = totalOutstanding.total;
+        // Total revenue is now correctly attributed via paid_amount column
+        summary.total_revenue = Number(summary.total_revenue) || 0;
+      }
 
       // Get transactions
       const transactions = db.prepare(`
-        SELECT id, receipt_number, created_at, grand_total, payment_method
+        SELECT id, receipt_number, created_at, grand_total, paid_amount, payment_method, status
         FROM transactions
-        WHERE status = 'completed'
+        WHERE status IN ('completed', 'debt')
           AND created_at LIKE ?
         ORDER BY created_at ASC
       `).all(`${date}%`) as any[];
@@ -450,7 +549,7 @@ export function registerSalesHandlers() {
           SUM(ti.quantity) as total_qty
         FROM transaction_items ti
         INNER JOIN transactions t ON t.id = ti.transaction_id
-        WHERE t.status = 'completed'
+        WHERE t.status IN ('completed', 'debt')
           AND t.created_at LIKE ?
         GROUP BY ti.product_name, ti.product_size
         ORDER BY total_qty DESC
@@ -497,16 +596,16 @@ export function registerSalesHandlers() {
     const summary = db.prepare(`
       SELECT 
         COUNT(*) as transaction_count,
-        COALESCE(SUM(grand_total), 0) as total_revenue,
+        COALESCE(SUM(paid_amount), 0) as total_revenue,
         COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total ELSE 0 END), 0) as cash_total,
         COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total ELSE 0 END), 0) as momo_total,
         COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0) as card_total,
-        COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total ELSE 0 END), 0) as credit_total
+        COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total - paid_amount ELSE 0 END), 0) as credit_total
       FROM transactions
       WHERE cashier_name = ?
         AND created_at >= ?
         AND created_at <= ?
-        AND status = 'completed'
+        AND status IN ('completed', 'debt')
     `).get(cashierName, clockIn, endTime);
 
     return { transactions, summary };

@@ -276,3 +276,61 @@ h1, h2, h3, h4, h5, h6 {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body, html {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    visibility: hidden; /* Hide everything by default */
+  }
+
+  /* Specific fix for receipt isolation */
+  .receipt-print-container {
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    background: white !important;
+    display: block !important;
+    z-index: 9999 !important;
+  }
+
+  .receipt-print-container * {
+    visibility: visible !important;
+  }
+
+  .glass-panel {
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 80mm !important; /* Standard thermal receipt width */
+    margin: 0 auto !important;
+    transform: none !important;
+  }
+
+  .receipt-animation {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* Receipt Animation */
+@keyframes receiptSlideDown {
+  from { opacity: 0; transform: scale(0.95) translateY(-20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.receipt-animation {
+  animation: receiptSlideDown 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}

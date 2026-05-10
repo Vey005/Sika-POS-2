@@ -9,7 +9,7 @@ export default function ActivationScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
-  const { setActivated, setBusinessInfo, setSetupComplete } = useAuthStore();
+  const { setActivated, setBusinessInfo, setBusinessLogo, setSetupComplete } = useAuthStore();
   const navigate = useNavigate();
 
   const handleActivate = async (e: React.FormEvent) => {
@@ -25,11 +25,12 @@ export default function ActivationScreen() {
 
     try {
       const machineId = window.sikapos?.machineId || 'PC-' + Math.random().toString(36).substring(7).toUpperCase();
-      
-      // ── OFFLINE BYPASS FOR DEMO / SCHOOL PROJECT ──
-      const demoKeys = ['SIKA-DEMO-2024', 'SIKA-20LY-2QE1-H1NR'];
-      if (demoKeys.includes(key) || key.startsWith('SIKA-DEMO')) {
-        setStatus('Offline demo key accepted. Activating...');
+
+      // ── OFFLINE DEMO BYPASS — DEV BUILDS ONLY ──
+      // Available only when running `vite dev` (import.meta.env.DEV).
+      // Never accept demo keys in a packaged production build.
+      if (import.meta.env.DEV && key.startsWith('SIKA-DEMO')) {
+        setStatus('Dev demo key accepted. Activating...');
         if (window.sikapos?.secureStore) {
           await window.sikapos.secureStore.set('license_key', key);
           await window.sikapos.secureStore.set('is_activated', 'true');
@@ -44,7 +45,7 @@ export default function ActivationScreen() {
 
       // Get machine name (computer name)
       const machineName = window.sikapos?.machineName || 'Unknown PC';
-      
+
       const response = await fetch(`${CLOUD_SERVER_URL}/v1/licenses/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,11 +61,14 @@ export default function ActivationScreen() {
         return;
       }
 
-      // Save activation to secure storage
+      // Save activation and profile to secure storage
       if (window.sikapos?.secureStore) {
         await window.sikapos.secureStore.set('license_key', key);
         await window.sikapos.secureStore.set('is_activated', 'true');
-        await window.sikapos.secureStore.set('business_name', data.business_name);
+        if (data.business_name) await window.sikapos.secureStore.set('business_name', data.business_name);
+        if (data.business_address) await window.sikapos.secureStore.set('business_address', data.business_address);
+        if (data.business_phone) await window.sikapos.secureStore.set('business_phone', data.business_phone);
+        if (data.business_logo) await window.sikapos.secureStore.set('business_logo', data.business_logo);
       }
 
       setActivated(true);
@@ -74,21 +78,33 @@ export default function ActivationScreen() {
       try {
         const pullRes = await fetch(`${CLOUD_SERVER_URL}/v1/sync/pull?business_id=${encodeURIComponent(key)}`);
         const pullData = await pullRes.json();
-        
+
         if (pullData.success && pullData.data && Object.keys(pullData.data).length > 0) {
           // ── RECOVERY: Returning customer ──
           setStatus('Found your data! Restoring everything...');
           await window.sikapos?.sync?.restore();
-          setBusinessInfo(data.business_name);
-          setSetupComplete(true);
-          await window.sikapos?.secureStore.set('setup_complete', 'true');
-          setStatus('✅ All data restored!');
-          await new Promise(r => setTimeout(r, 1500));
-          navigate('/login', { replace: true });
+
+          if (data.business_name) setBusinessInfo(data.business_name);
+          if (data.business_logo) setBusinessLogo(data.business_logo);
+
+          // If we restored users, we can go to login. Otherwise setup Step 2.
+          const hasUsers = pullData.data.users && pullData.data.users.length > 0;
+
+          if (hasUsers) {
+            setSetupComplete(true);
+            await window.sikapos?.secureStore.set('setup_complete', 'true');
+            setStatus('✅ All data restored!');
+            await new Promise(r => setTimeout(r, 1500));
+            navigate('/login', { replace: true });
+          } else {
+            setStatus('Profile restored. Please create an admin account.');
+            await new Promise(r => setTimeout(r, 1000));
+            navigate('/setup', { replace: true });
+          }
           return;
         }
-      } catch {
-        // Cloud unreachable — continue to fresh setup
+      } catch (err) {
+        console.warn('Sync pull failed during activation:', err);
       }
 
       // ── FIRST TIME: New customer → go to business setup ──
@@ -122,9 +138,9 @@ export default function ActivationScreen() {
 
           <div className={styles.inputGroup}>
             <label>License Key</label>
-            <input 
-              type="text" 
-              placeholder="SIKA-XXXX-XXXX-XXXX" 
+            <input
+              type="text"
+              placeholder="SIKA-XXXX-XXXX-XXXX"
               value={key}
               onChange={(e) => setKey(e.target.value.toUpperCase())}
               required

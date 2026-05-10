@@ -25,16 +25,18 @@ interface DashboardData {
   totalSales: number;
   transactionCount: number;
   totalProducts: number;
+  totalCredit: number;
   lowStockCount: number;
   chartData: Array<{ date: string; sales: number; transactions: number }>;
-  recentTransactions: Array<{
-    id: number;
-    receipt_number: string;
-    grand_total: number;
-    payment_method: string;
-    created_at: string;
-    cashier_name: string;
-  }>;
+    recentTransactions: Array<{
+      id: number;
+      receipt_number: string;
+      grand_total: number;
+      payment_method: string;
+      created_at: string;
+      cashier_name: string;
+      status: string;
+    }>;
 }
 
 export default function Dashboard() {
@@ -52,11 +54,16 @@ export default function Dashboard() {
     try {
       const params = new URLSearchParams();
       
+      // Helper to format date as YYYY-MM-DD (no timezone, date-only)
+      const fmt = (d: Date): string => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      
       // Calculate date range based on filter
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       
@@ -66,61 +73,53 @@ export default function Dashboard() {
       switch (dateFilter) {
         case 'today':
           fromDate = today;
-          toDate = tomorrow;
+          toDate = today;
           break;
         case 'yesterday':
           fromDate = yesterday;
-          toDate = today;
+          toDate = yesterday;
           break;
         case 'lastWeek':
-          // Last week: Monday to Sunday of previous week
-          const lastWeekStart = new Date(today);
-          lastWeekStart.setDate(today.getDate() - today.getDay() - 7);
-          fromDate = lastWeekStart;
-          const lastWeekEnd = new Date(lastWeekStart);
-          lastWeekEnd.setDate(lastWeekStart.getDate() + 7);
-          toDate = lastWeekEnd;
+          // Last 7 days (not including today)
+          const weekEnd = new Date(today);
+          weekEnd.setDate(today.getDate() - 1);
+          const weekStart = new Date(today);
+          weekStart.setDate(today.getDate() - 7);
+          fromDate = weekStart;
+          toDate = weekEnd;
           break;
         case 'thisMonth':
-          // This month: 1st to today
           fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
-          toDate = new Date(today);
-          toDate.setHours(23, 59, 59, 999);
+          toDate = today;
           break;
         case 'lastMonth':
-          // Last month: 1st to last day of previous month
           fromDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
           toDate = new Date(today.getFullYear(), today.getMonth(), 0);
-          toDate.setHours(23, 59, 59, 999);
           break;
         case 'allTime':
-          // All time: far past to far future
-          fromDate = new Date(2000, 0, 1); // Year 2000
-          toDate = new Date(2100, 11, 31); // Year 2100
+          fromDate = new Date(2000, 0, 1);
+          toDate = new Date(2100, 11, 31);
           break;
         case 'custom':
           if (customDate) {
             fromDate = new Date(customDate);
-            fromDate.setHours(0, 0, 0, 0);
             if (customDateTo) {
               toDate = new Date(customDateTo);
-              toDate.setHours(23, 59, 59, 999);
             } else {
               toDate = new Date(fromDate);
-              toDate.setHours(23, 59, 59, 999);
             }
           } else {
             fromDate = today;
-            toDate = tomorrow;
+            toDate = today;
           }
           break;
         default:
           fromDate = today;
-          toDate = tomorrow;
+          toDate = today;
       }
       
-      params.set('from', fromDate.toISOString());
-      params.set('to', toDate.toISOString());
+      params.set('from', fmt(fromDate));
+      params.set('to', fmt(toDate));
       
       const res = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.DASHBOARD_SUMMARY}?${params}`), {
         headers: { Authorization: `Bearer ${token}` },
@@ -137,6 +136,7 @@ export default function Dashboard() {
         totalSales: summary.totalSales || 0,
         transactionCount: summary.transactionCount || 0,
         totalProducts: summary.totalProducts || 0,
+        totalCredit: summary.totalCredit || 0,
         lowStockCount: summary.lowStockCount || 0,
         chartData: summary.chartData || [],
         recentTransactions: summary.recentTx || [],
@@ -299,6 +299,13 @@ export default function Dashboard() {
           color="primary"
         />
         <StatCard
+          title="Outstanding Credit"
+          value={formatCurrency(data.totalCredit)}
+          subtitle="Unpaid debt balance"
+          icon={Receipt}
+          color={data.totalCredit > 0 ? 'danger' : 'secondary'}
+        />
+        <StatCard
           title="Transactions"
           value={data.transactionCount.toLocaleString()}
           subtitle="Total sales count"
@@ -412,29 +419,38 @@ export default function Dashboard() {
                       {tx.grand_total.toFixed(2)}
                     </td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <span
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          background:
-                            tx.payment_method === 'cash'
-                              ? 'rgba(16,185,129,0.1)'
-                              : tx.payment_method === 'momo'
-                              ? 'rgba(139,92,246,0.1)'
-                              : 'rgba(255,255,255,0.1)',
-                          color:
-                            tx.payment_method === 'cash'
-                              ? 'var(--success)'
-                              : tx.payment_method === 'momo'
-                              ? 'var(--primary)'
-                              : 'var(--text-muted)',
-                        }}
-                      >
-                        {tx.payment_method}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <span
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            background:
+                              tx.payment_method === 'cash'
+                                ? 'rgba(16,185,129,0.1)'
+                                : tx.payment_method === 'momo'
+                                ? 'rgba(139,92,246,0.1)'
+                                : tx.payment_method === 'credit'
+                                ? 'rgba(249, 115, 22, 0.1)'
+                                : 'rgba(255,255,255,0.1)',
+                            color:
+                              tx.payment_method === 'cash'
+                                ? 'var(--success)'
+                                : tx.payment_method === 'momo'
+                                ? 'var(--primary)'
+                                : tx.payment_method === 'credit'
+                                ? '#FB923C'
+                                : 'var(--text-muted)',
+                          }}
+                        >
+                          {tx.payment_method}
+                        </span>
+                        {tx.status === 'debt' && (
+                          <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#FB923C' }}>OWES</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

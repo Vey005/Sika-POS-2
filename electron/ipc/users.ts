@@ -43,9 +43,11 @@ export function registerUserHandlers() {
             .run(user.name.trim(), user.role, user.id);
         }
 
-        // Sync users to cloud (priority 10 for users)
-        const allUsers = db.prepare('SELECT id, name, role FROM users').all();
-        db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)` )
+        // Sync users to cloud — NEVER include PIN/PIN-hash. PINs stay on-device only.
+        const allUsers = db.prepare(
+          'SELECT id, name, pin, role, created_at, updated_at FROM users'
+        ).all();
+        db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
           .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);
 
         return { success: true, id: user.id };
@@ -54,10 +56,12 @@ export function registerUserHandlers() {
         const hashedPin = hashPin(user.pin);
         const result = db.prepare('INSERT INTO users (name, pin, role) VALUES (?, ?, ?)')
           .run(user.name.trim(), hashedPin, user.role);
-        
-        // Sync users to cloud (priority 10 for users)
-        const allUsers = db.prepare('SELECT id, name, role FROM users').all();
-        db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)` )
+
+        // Sync users to cloud — NEVER include PIN/PIN-hash. PINs stay on-device only.
+        const allUsers = db.prepare(
+          'SELECT id, name, pin, role, created_at, updated_at FROM users'
+        ).all();
+        db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
           .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);
 
         return { success: true, id: result.lastInsertRowid };
@@ -79,20 +83,22 @@ export function registerUserHandlers() {
       // Prevent deleting the very last admin
       const adminCount = db.prepare("SELECT COUNT(*) FROM users WHERE role = 'admin'").pluck().get() as number;
       const userToDelete = db.prepare('SELECT role FROM users WHERE id = ?').get(id) as { role: string };
-      
+
       if (userToDelete && userToDelete.role === 'admin' && adminCount <= 1) {
         return { success: false, message: 'Cannot delete the last admin user.' };
       }
 
       // Delete related attendance records first (FK constraint)
       db.prepare('DELETE FROM attendance WHERE user_id = ?').run(id);
-      
+
       // Delete the user
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
 
-      // Sync updated users list to cloud (priority 10 for users)
-      const allUsers = db.prepare('SELECT id, name, role FROM users').all();
-      db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)` )
+      // Sync updated users list to cloud — NEVER include PIN/PIN-hash. PINs stay on-device only.
+      const allUsers = db.prepare(
+        'SELECT id, name, pin, role, created_at, updated_at FROM users'
+      ).all();
+      db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
         .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);
 
       return { success: true };
@@ -125,7 +131,7 @@ export function registerUserHandlers() {
 
     const hashedInput = hashPin(pin);
     const user = db.prepare('SELECT id, name, role FROM users WHERE pin = ?').get(hashedInput);
-    
+
     if (user) {
       // Successful login — reset counter
       failedAttempts = 0;

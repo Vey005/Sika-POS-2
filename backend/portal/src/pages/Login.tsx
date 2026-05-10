@@ -30,7 +30,7 @@ export default function Login() {
       if (data.role === 'admin') {
         login('admin', undefined, undefined, data.token);
       } else {
-        login('business', data.businessId, data.businessName, data.token);
+        login('business', data.businessId, data.businessName, data.token, data.businessLogo);
       }
     } catch (err: any) {
       setError(err.message);
@@ -61,14 +61,14 @@ export default function Login() {
 
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>Store Name</label>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>Store Name / Admin Email</label>
             <div style={{ position: 'relative' }}>
               <Building2 size={18} style={{ position: 'absolute', left: '16px', top: '16px', color: 'var(--text-muted)' }} />
               <input 
                 type="text" 
                 className="input-field" 
                 style={{ paddingLeft: '44px' }}
-                placeholder="Your Shop Name"
+                placeholder="Your Shop Name or Email"
                 value={storeName}
                 onChange={e => setStoreName(e.target.value)}
                 required

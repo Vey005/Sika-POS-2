@@ -32,6 +32,7 @@ export default function SettingsScreen() {
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [savingInventory, setSavingInventory] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const [staff, setStaff] = useState<Array<{ id: number; name: string; role: string; created_at: string }>>([]);
@@ -93,23 +94,19 @@ export default function SettingsScreen() {
       setBusinessInfo(settings.business_name);
       useAuthStore.getState().setReceiptFooter(settings.receipt_footer);
 
-      // --- Sync Business Name to Cloud Portal ---
-      const licenseKey = await window.sikapos?.secureStore.get('license_key');
-      if (licenseKey && !licenseKey.startsWith('SIKA-DEMO')) {
-        try {
-          await fetch(`${CLOUD_SERVER_URL}/v1/licenses/update-name`, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${licenseKey}`
-            },
-            body: JSON.stringify({ license_key: licenseKey, business_name: settings.business_name })
-          });
-          console.log('[Settings] Cloud business name updated successfully.');
-        } catch (e) {
-          console.warn('[Settings] Failed to sync business name to cloud.', e);
-        }
-      }
+      // --- Sync Business Info (Name & Logo) to Cloud Portal via Sync Queue ---
+      const businessLogo = await window.sikapos?.secureStore.get('business_logo');
+      await window.sikapos?.sync.queueItem({
+        entity: 'business_info',
+        operation: 'update',
+        payload: {
+          business_name: settings.business_name,
+          business_logo: businessLogo || null
+        },
+        priority: 2 // High priority
+      });
+      
+      console.log('[Settings] Business info update queued for sync.');
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -203,6 +200,54 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleExportInventory = async () => {
+    if (!window.sikapos) return;
+    setExporting(true);
+    try {
+      const allProducts = await window.sikapos.inventory.getAll({ limit: 99999 });
+      if (!allProducts || allProducts.length === 0) {
+        alert('No products found in inventory to export.');
+        return;
+      }
+
+      // Build CSV content
+      const headers = ['Name', 'Barcode', 'Category', 'Unit Price', 'Cost Price', 'Stock Qty', 'Low Stock Threshold', 'Tax Category', 'Unit', 'Active'];
+      const rows = allProducts.map((p: any) => [
+        `"${(p.name || '').replace(/"/g, '""')}"`,
+        `"${p.barcode || ''}"`,
+        `"${p.category || 'General'}"`,
+        p.unit_price ?? p.price ?? 0,
+        p.cost_price ?? 0,
+        p.stock_qty ?? p.stock ?? 0,
+        p.low_stock_threshold ?? 0,
+        `"${p.tax_category || 'standard'}"`,
+        `"${p.unit || 'piece'}"`,
+        p.is_active !== undefined ? (p.is_active ? 'Yes' : 'No') : 'Yes',
+      ].join(','));
+
+      const csv = [headers.join(','), ...rows].join('\n');
+
+      // Trigger download
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      link.download = `SikaPOS_Inventory_${dateStr}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      window.sikapos.notifications.show('Export Complete', `${allProducts.length} products exported to CSV.`);
+    } catch (err: any) {
+      console.error('Export error:', err);
+      alert('Export failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className={styles.screen}>
       {/* Header */}
@@ -286,6 +331,14 @@ export default function SettingsScreen() {
                         if (window.sikapos?.secureStore) {
                           await window.sikapos.secureStore.set('business_logo', base64);
                           setBusinessLogo(base64);
+                          
+                          // Queue sync
+                          await window.sikapos?.sync.queueItem({
+                            entity: 'business_info',
+                            operation: 'update',
+                            payload: { business_name: settings.business_name, business_logo: base64 },
+                            priority: 2
+                          });
                         }
                       };
                       reader.readAsDataURL(file);
@@ -296,6 +349,13 @@ export default function SettingsScreen() {
                   <button className={styles.removeLogo} onClick={async () => {
                     await window.sikapos?.secureStore.set('business_logo', '');
                     setBusinessLogo('');
+                    // Queue sync
+                    await window.sikapos?.sync.queueItem({
+                      entity: 'business_info',
+                      operation: 'update',
+                      payload: { business_name: settings.business_name, business_logo: null },
+                      priority: 2
+                    });
                   }}>Remove</button>
                 )}
               </div>
@@ -491,7 +551,7 @@ export default function SettingsScreen() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: '24px', padding: '16px', background: 'rgba(59,130,246,0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(59,130,246,0.1)' }}>
+                <div style={{ padding: '16px', background: 'rgba(59,130,246,0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(59,130,246,0.1)' }}>
                   <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>Cloud Identity</h4>
                   <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
                     Your store name must be synced for the web portal login to work.
@@ -500,9 +560,17 @@ export default function SettingsScreen() {
                     className={styles.outlineBtn} 
                     style={{ width: '100%', justifyContent: 'center' }}
                     onClick={async () => {
+                      console.log('[Sync] Identity sync button clicked');
                       setSaving(true);
                       try {
                         const licenseKey = await window.sikapos?.secureStore.get('license_key');
+                        console.log('[Sync] Using license key:', licenseKey ? '***' + licenseKey.slice(-4) : 'MISSING');
+                        
+                        if (!licenseKey) {
+                          throw new Error('No license key found. Please activate the app first.');
+                        }
+
+                        console.log('[Sync] Sending request to:', `${CLOUD_SERVER_URL}/v1/licenses/update-name`);
                         const res = await fetch(`${CLOUD_SERVER_URL}/v1/licenses/update-name`, {
                           method: 'POST',
                           headers: { 
@@ -512,7 +580,9 @@ export default function SettingsScreen() {
                           body: JSON.stringify({ license_key: licenseKey, business_name: settings.business_name })
                         });
                         
+                        console.log('[Sync] Response status:', res.status);
                         const data = await res.json();
+                        console.log('[Sync] Response data:', data);
                         
                         if (res.ok) {
                           window.sikapos.notifications.show('Cloud Synced', 'Store identity updated on the portal.');
@@ -520,6 +590,7 @@ export default function SettingsScreen() {
                           alert(`Sync failed: ${data.message || 'Server error'}`);
                         }
                       } catch (e: any) {
+                        console.error('[Sync] Identity sync failed:', e);
                         alert(`Sync failed: ${e.message}. The cloud server might still be building - please try again in 1 minute.`);
                       } finally {
                         setSaving(false);
@@ -530,7 +601,7 @@ export default function SettingsScreen() {
                   </button>
                 </div>
 
-                <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(248, 113, 113, 0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.18)' }}>
+                <div style={{ padding: '16px', background: 'rgba(248, 113, 113, 0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.18)' }}>
                   <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>Clear Inventory</h4>
                   <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
                     Permanently clear all local inventory and queue a cloud delete sync. This cannot be undone.
@@ -546,7 +617,24 @@ export default function SettingsScreen() {
                   </button>
                 </div>
 
-                <button className={styles.restoreBtn} onClick={handleCloudRestore} disabled={saving} style={{ marginTop: '16px' }}>
+                <div style={{ padding: '16px', background: 'rgba(16,185,129,0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16,185,129,0.15)' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>📦 Export Inventory</h4>
+                  <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                    Download all your products as a CSV file. Useful for backup, reporting, or importing to another system.
+                  </p>
+                  <button
+                    type="button"
+                    className={styles.outlineBtn}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={handleExportInventory}
+                    disabled={exporting}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    {exporting ? 'Exporting...' : 'Export All Products to CSV'}
+                  </button>
+                </div>
+
+                <button className={styles.restoreBtn} onClick={handleCloudRestore} disabled={saving}>
                   {saving ? 'Processing...' : 'Start Cloud Recovery'}
                 </button>
               </div>

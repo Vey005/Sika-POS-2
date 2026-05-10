@@ -23,11 +23,29 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
   const [error, setError] = useState('');
   const [stockWarnings, setStockWarnings] = useState<string[]>([]);
   const [confirmedWarnings, setConfirmedWarnings] = useState(false);
+  const [customerInfo, setCustomerInfo] = useState<any>(null);
 
-    const { 
+  const { 
     items, customerId, customerName, discountAmount, discountType, grandTotal, taxBreakdown,
     orderType, orderNote 
   } = useCartStore();
+
+  // Load customer details when needed
+  useEffect(() => {
+    if (method === 'credit' && customerId) {
+      (async () => {
+        try {
+          const data = await window.sikapos.customers.getById(customerId);
+          setCustomerInfo(data);
+        } catch (e) {
+          console.error('Failed to fetch customer info', e);
+          setCustomerInfo(null);
+        }
+      })();
+    } else {
+      setCustomerInfo(null);
+    }
+  }, [method, customerId]);
   const { user } = useAuthStore();
 
   const total = grandTotal();
@@ -73,6 +91,17 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
     if (warnings.length > 0 && !confirmedWarnings) {
       setStockWarnings(warnings);
       return;
+    }
+
+    // Credit limit pre‑validation (client‑side friendly)
+    if (method === 'credit' && customerInfo) {
+      const limit = Number(customerInfo.credit_limit) || 0;
+      const balance = Number(customerInfo.credit_balance) || 0;
+      if (limit > 0 && (balance + total) > limit) {
+        setError(`Credit limit exceeded. Limit GHS ${limit.toFixed(2)}, current balance GHS ${balance.toFixed(2)}, this sale GHS ${total.toFixed(2)} would exceed limit.`);
+        setProcessing(false);
+        return;
+      }
     }
 
     setProcessing(true);
@@ -194,24 +223,12 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           <div className={styles.momoStep}>
             <div className={styles.momoIcon}>📱</div>
             <p className={styles.momoTitle}>Mobile Money Payment</p>
-            <p className={styles.momoSubtitle}>Enter customer's phone number</p>
-            <div className={styles.inputGroup}>
-              <label className={styles.inputLabel}>Phone Number</label>
-              <div className={styles.inputWrap}>
-                <span className={styles.inputPrefix}>🇬🇭</span>
-                <input
-                  className={styles.amountInput}
-                  type="tel"
-                  placeholder="024 000 0000"
-                  value={momoPhone}
-                  onChange={e => setMomoPhone(e.target.value)}
-                  maxLength={15}
-                />
-              </div>
+            <p className={styles.momoSubtitle}>Amount: GHS {formatCurrency(total)}</p>
+            <div className={styles.cardInstructions}>
+              <p>1. Collect payment from customer via MoMo</p>
+              <p>2. Verify that the correct amount has been received</p>
+              <p>3. Click <strong>Confirm Payment</strong> below to complete</p>
             </div>
-            <p className={styles.momoNote}>
-              Ask the customer to confirm the GHS {formatCurrency(total)} payment on their phone.
-            </p>
           </div>
         )}
 
@@ -237,6 +254,24 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
             {customerName ? (
               <>
                 <p className={styles.momoSubtitle}>Adding to {customerName}'s account</p>
+                {(() => {
+                  // Check if customer has outstanding credit balance
+                  const creditBalance = useCartStore.getState().customerCreditBalance;
+                  if (creditBalance && creditBalance > 0) {
+                    return (
+                      <div className={styles.warningBox} style={{ marginBottom: '16px' }}>
+                        <div className={styles.warningHeader}>
+                          <span className={styles.warningIcon}>⚠</span>
+                          <h3 className={styles.warningTitle}>Outstanding Credit</h3>
+                        </div>
+                        <p className={styles.warningText}>
+                          This customer already has <strong>GHS {formatCurrency(creditBalance)}</strong> in outstanding credit.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 <div className={styles.creditInfo}>
                   <div className={styles.creditRow}>
                     <span>Customer</span>

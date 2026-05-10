@@ -43,7 +43,7 @@ interface Window {
       search: (query: string) => Promise<Customer[]>;
       getById: (id: number) => Promise<CustomerWithHistory>;
       save: (customer: Partial<Customer>) => Promise<{ id?: number; success: boolean; message?: string }>;
-      addCreditPayment: (customerId: number, amount: number, note: string) => Promise<{ success: boolean; message?: string }>;
+      addCreditPayment: (customerId: number, amount: number, note: string, method?: string) => Promise<{ success: boolean; customer?: Customer; message?: string }>;
     };
     settings: {
       get: (key: string) => Promise<string | null>;
@@ -220,6 +220,9 @@ interface TodaySummary {
   momo_total: number;
   card_total: number;
   credit_total: number;
+  credit_issued_total?: number;
+  outstanding_credit?: number;
+  debt_recovered?: number;
 }
 
 interface Customer {
@@ -228,6 +231,7 @@ interface Customer {
   phone?: string;
   email?: string;
   credit_balance: number;
+  credit_limit: number;
   loyalty_points: number;
   total_spent: number;
   notes?: string;

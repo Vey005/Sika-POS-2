@@ -4,6 +4,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import Layout from './components/Layout';
 import Inventory from './pages/Inventory';
 import Reports from './pages/Reports';
+import Customers from './pages/Customers';
 import { useAuthStore } from './store/auth';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role: 'admin' | 'business' }) {
@@ -36,6 +37,7 @@ export default function App() {
         <Route element={<ProtectedRoute role="business"><Layout /></ProtectedRoute>}>
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/customers" element={<Customers />} />
         </Route>
 
         <Route path="*" element={<Navigate to={isAuthenticated ? (userRole === 'admin' ? '/admin' : '/reports') : '/login'} replace />} />

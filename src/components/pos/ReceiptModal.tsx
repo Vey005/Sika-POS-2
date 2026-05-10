@@ -181,34 +181,34 @@ export default function ReceiptModal({ result, onClose }: Props) {
                 <span style={{ color: 'var(--color-success)' }}>- GHS {effectiveDiscount.toFixed(2)}</span>
               </div>
             )}
-            {result.tax.totalTax > 0 && (
+            {result.tax && (
               <>
                 <div className={styles.totalRow}>
                   <span>VAT (12.5%)</span>
-                  <span>GHS {result.tax.vat.toFixed(2)}</span>
+                  <span>GHS {(result.tax.vat || 0).toFixed(2)}</span>
                 </div>
                 <div className={styles.totalRow}>
                   <span>NHIL (2.5%)</span>
-                  <span>GHS {result.tax.nhil.toFixed(2)}</span>
+                  <span>GHS {(result.tax.nhil || 0).toFixed(2)}</span>
                 </div>
                 <div className={styles.totalRow}>
                   <span>GETFund (2.5%)</span>
-                  <span>GHS {result.tax.getfund.toFixed(2)}</span>
+                  <span>GHS {(result.tax.getfund || 0).toFixed(2)}</span>
                 </div>
                 <div className={styles.totalRow}>
                   <span>COVID Levy (1%)</span>
-                  <span>GHS {result.tax.covid.toFixed(2)}</span>
+                  <span>GHS {(result.tax.covid || 0).toFixed(2)}</span>
                 </div>
               </>
             )}
             <div className={`${styles.totalRow} ${styles.grandTotalRow}`}>
               <span>TOTAL</span>
-              <span>GHS {result.grandTotal.toFixed(2)}</span>
+              <span>GHS {(result.grandTotal || 0).toFixed(2)}</span>
             </div>
-            {result.changeGiven > 0 && (
+            {(result.changeGiven || 0) > 0 && (
               <div className={`${styles.totalRow} ${styles.changeRow}`}>
                 <span>Change Given</span>
-                <span>GHS {result.changeGiven.toFixed(2)}</span>
+                <span>GHS {(result.changeGiven || 0).toFixed(2)}</span>
               </div>
             )}
           </div>

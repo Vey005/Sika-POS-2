@@ -41,9 +41,17 @@ function runMigrations(db: Database.Database) {
   const applied = db.prepare('SELECT version FROM schema_version').pluck().all() as number[];
   const applyMigration = (version: number, sql: string) => {
     if (!applied.includes(version)) {
-      db.exec(sql);
-      db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(version);
-      console.log(`[DB] Migration V${String(version).padStart(3, '0')} applied`);
+      console.log(`[DB] Applying migration V${version}...`);
+      try {
+        db.exec(sql);
+        db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(version);
+        console.log(`[DB] Migration V${String(version).padStart(3, '0')} applied successfully`);
+      } catch (err: any) {
+        console.error(`[DB] Migration V${version} FAILED:`, err.message);
+        throw err;
+      }
+    } else {
+      // console.log(`[DB] Migration V${version} already applied`);
     }
   };
 
@@ -163,6 +171,24 @@ function runMigrations(db: Database.Database) {
       note TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE INDEX IF NOT EXISTS idx_credit_log_customer ON credit_log(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_log_transaction ON credit_log(transaction_id);
+  `);
+
+  // V017 — Credit Log Transaction Types
+  applyMigration(17, `
+    -- Add check constraint for valid transaction types
+    CREATE TRIGGER IF NOT EXISTS validate_credit_log_type
+    BEFORE INSERT ON credit_log
+    BEGIN
+      SELECT CASE
+        WHEN NEW.type NOT IN ('credit_sale', 'payment', 'void', 'refund', 'adjustment')
+        THEN RAISE(ABORT, 'Invalid credit_log type')
+      END;
+    END;
+
+    -- Fix existing default values
+    UPDATE credit_log SET type = 'credit_sale' WHERE type = 'credit';
   `);
 
   // V007 — Sync Queue
@@ -251,6 +277,70 @@ function runMigrations(db: Database.Database) {
     UPDATE sync_queue SET priority = 5 WHERE entity = 'product';
     UPDATE sync_queue SET priority = 10 WHERE entity NOT IN ('transaction', 'product');
   `);
+  // V018 — Credit Payments (Debt History)
+  applyMigration(18, `
+    CREATE TABLE IF NOT EXISTS credit_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cloud_id INTEGER,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      amount REAL NOT NULL,
+      payment_method TEXT DEFAULT 'cash',
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_credit_payments_customer ON credit_payments(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_payments_customer_date ON credit_payments(customer_id, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_payments_cloud ON credit_payments(cloud_id);
+  `);
+
+  // V019 — Ensure cloud_id column exists for payments (Safe check)
+  try {
+    db.exec("ALTER TABLE credit_payments ADD COLUMN cloud_id INTEGER;");
+  } catch (e) {}
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_payments_cloud ON credit_payments(cloud_id);");
+  if (!applied.includes(19)) {
+    db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(19);
+  }
+
+  // V020 — Credit Limit per Customer
+  applyMigration(20, `
+    ALTER TABLE customers ADD COLUMN credit_limit REAL DEFAULT 0;
+    UPDATE customers SET credit_limit = 0 WHERE credit_limit IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_credit_payments_customer_date ON credit_payments(customer_id, created_at);
+  `);
+
+  // V021 — Revenue Realization (Paid Amount)
+  applyMigration(21, `
+    ALTER TABLE transactions ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0;
+    
+    -- Backfill existing data: 
+    -- 1. All non-credit sales are fully paid
+    -- 2. All credit sales marked as 'completed' are fully paid
+    UPDATE transactions 
+    SET paid_amount = grand_total 
+    WHERE payment_method != 'credit' OR status = 'completed';
+    
+    -- 3. For 'debt' transactions, we'll initialize at 0 (they will be updated by new payment logic)
+    UPDATE transactions 
+    SET paid_amount = 0 
+    WHERE payment_method = 'credit' AND status = 'debt';
+  `);
+
+  // --- SCHEMA HARDENING ---
+  // Ensure critical columns exist even if migrations were skipped/corrupted
+  const harden = (table: string, column: string, type: string) => {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+      console.log(`[DB] Hardened: Added missing column ${column} to ${table}`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
+  };
+
+  harden('transactions', 'paid_amount', 'REAL NOT NULL DEFAULT 0');
+  harden('transactions', 'order_type', "TEXT DEFAULT 'retail'");
+  harden('products', 'is_inventory', 'INTEGER NOT NULL DEFAULT 1');
+  harden('customers', 'credit_limit', 'REAL DEFAULT 0');
 }
 
 
