@@ -126,7 +126,8 @@ export default function ReportsScreen() {
             date,
             summary: data.summary,
             transactions: data.transactions,
-            itemSummary: data.itemSummary
+            itemSummary: data.itemSummary,
+            config: useAuthStore.getState().receiptConfig
           });
         }
       }

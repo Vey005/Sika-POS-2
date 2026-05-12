@@ -11,6 +11,7 @@ import InventoryScreen from './screens/Inventory';
 import CustomersScreen from './screens/Customers';
 import ReportsScreen from './screens/Reports';
 import SettingsScreen from './screens/Settings';
+import DashboardScreen from './screens/Dashboard';
 
 export default function App() {
   const { isAuthenticated, isActivated, isSetupComplete, setBusinessInfo, setBusinessLogo, setActivated, setSetupComplete } = useAuthStore();
@@ -61,6 +62,18 @@ export default function App() {
         }
         if (biz.receipt_footer) {
           useAuthStore.getState().setReceiptFooter(biz.receipt_footer);
+        }
+        if (biz.tax_config) {
+          try {
+            useAuthStore.getState().setTaxConfig(JSON.parse(biz.tax_config));
+          } catch(e) {}
+        }
+        if (biz.receipt_config) {
+          try {
+            const saved = JSON.parse(biz.receipt_config);
+            const current = useAuthStore.getState().receiptConfig;
+            useAuthStore.getState().setReceiptConfig({ ...current, ...saved });
+          } catch(e) {}
         }
       } catch (err) {
         console.error('App init failed', err);
@@ -133,6 +146,7 @@ export default function App() {
           <Route path="pos" element={<POSScreen />} />
           <Route path="inventory" element={<InventoryScreen />} />
           <Route path="customers" element={<CustomersScreen />} />
+          <Route path="dashboard" element={<DashboardScreen />} />
           <Route path="reports" element={<ReportsScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
         </Route>

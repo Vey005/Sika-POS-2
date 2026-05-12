@@ -37,6 +37,7 @@ export default function CartPanel({ onCharge }: Props) {
         cashier: user?.name || 'Cashier',
         businessName: 'SikaPOS Restaurant', // This could be from config
         date: new Date().toLocaleString(),
+        config: useAuthStore.getState().receiptConfig,
       });
       window.sikapos.notifications.show('Kitchen Order Sent', 'The order has been sent to the kitchen printer.');
     } catch (err) {

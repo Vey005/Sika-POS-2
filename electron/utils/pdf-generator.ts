@@ -18,6 +18,67 @@ function isSafeImageSrc(src: any): boolean {
   return /^data:image\/(png|jpe?g|gif);base64,[A-Za-z0-9+/]+=*$/.test(trimmed) || /^https?:\/\/[\w\-./?&=#%+~]+$/.test(trimmed);
 }
 
+// Code 128B barcode SVG generator for PDF receipts
+const CODE128B_PDF: number[][] = [
+  [2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],
+  [1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],
+  [2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],
+  [1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],
+  [2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],
+  [3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
+  [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],
+  [1,3,1,3,2,1],[1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],
+  [2,3,1,1,1,3],[2,3,1,3,1,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
+  [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[3,1,3,1,2,1],[2,1,1,3,3,1],
+  [2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],[3,1,1,1,2,3],
+  [3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
+  [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],
+  [1,2,1,1,2,4],[1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],
+  [1,1,2,4,1,2],[1,2,2,1,1,4],[1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],
+  [2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],[2,4,1,1,1,2],[1,3,4,1,1,1],
+  [1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],[1,2,4,1,1,2],
+  [1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
+  [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],
+  [1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],
+  [1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],
+  [2,1,1,2,3,2],[2,3,3,1,1,1,2],
+];
+
+function generateBarcodeSVG(text: string): string {
+  const START_B = 104, STOP = 106;
+  const codes: number[] = [START_B];
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i) - 32;
+    if (code >= 0 && code < 95) codes.push(code);
+  }
+  let checksum = codes[0];
+  for (let i = 1; i < codes.length; i++) checksum += codes[i] * i;
+  codes.push(checksum % 103);
+  codes.push(STOP);
+
+  const bars: boolean[] = [];
+  for (const code of codes) {
+    const pattern = CODE128B_PDF[code];
+    if (!pattern) continue;
+    for (let i = 0; i < pattern.length; i++) {
+      const width = pattern[i];
+      const isBar = i % 2 === 0;
+      for (let w = 0; w < width; w++) bars.push(isBar);
+    }
+  }
+
+  const quietZone = 10, svgWidth = 220;
+  const barWidth = (svgWidth - quietZone * 2) / bars.length;
+  let rects = '';
+  for (let i = 0; i < bars.length; i++) {
+    if (bars[i]) {
+      const x = quietZone + i * barWidth;
+      rects += `<rect x="${x.toFixed(2)}" y="0" width="${(barWidth + 0.3).toFixed(2)}" height="44" fill="#000"/>`;
+    }
+  }
+  return rects;
+}
+
 export async function saveAsPDF(data: any, type: 'receipt' | 'report') {
   const win = new BrowserWindow({
     show: false,
@@ -34,7 +95,7 @@ export async function saveAsPDF(data: any, type: 'receipt' | 'report') {
 
   const pdfPath = await dialog.showSaveDialog({
     title: `Save ${type === 'receipt' ? 'Receipt' : 'Report'} as PDF`,
-    defaultPath: `${type}-${escapeHtml(data.receiptNumber || data[0]?.date || new Date().getTime())}.pdf`,
+    defaultPath: `${type}-${escapeHtml(data.receiptNumber || (Array.isArray(data) ? data[0]?.date : data.date) || new Date().getTime())}.pdf`,
     filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
   });
 
@@ -74,6 +135,9 @@ export async function saveAsPDF(data: any, type: 'receipt' | 'report') {
 }
 
 function generateReceiptHtml(receipt: any) {
+  const cfg = receipt.config || {};
+  const cur = receipt.currency || 'GHS';
+
   return `
     <!DOCTYPE html>
     <html>
@@ -100,20 +164,27 @@ function generateReceiptHtml(receipt: any) {
     </head>
     <body>
       <div class="header">
-        ${isSafeImageSrc(receipt.businessLogo) ? `<img src="${escapeHtml(receipt.businessLogo)}" alt="Logo" style="max-width: 80px; max-height: 80px; object-fit: contain; margin-bottom: 10px;" />` : ''}
+        ${(cfg.showLogo !== false && isSafeImageSrc(receipt.businessLogo)) ? `<img src="${escapeHtml(receipt.businessLogo)}" alt="Logo" style="max-width: 80px; max-height: 80px; object-fit: contain; margin-bottom: 10px;" />` : ''}
         <div class="business-name">${escapeHtml(receipt.businessName)}</div>
-        <div class="info">Official Sales Receipt</div>
+        <div class="info">
+          ${cfg.showAddress !== false && receipt.businessAddress ? `<div>${escapeHtml(receipt.businessAddress)}</div>` : ''}
+          ${cfg.showPhone !== false && receipt.businessPhone ? `<div>Tel: ${escapeHtml(receipt.businessPhone)}</div>` : ''}
+          ${cfg.showTIN !== false && receipt.tin ? `<div>TIN: ${escapeHtml(receipt.tin)}</div>` : ''}
+          Official Sales Receipt
+        </div>
       </div>
 
       <div class="receipt-info">
         <div>
           <strong>Receipt No:</strong> ${escapeHtml(receipt.receiptNumber)}<br>
           <strong>Date:</strong> ${escapeHtml(receipt.date)}<br>
-          ${receipt.customerName ? `<strong>Customer:</strong> ${escapeHtml(receipt.customerName)}` : ''}
+          ${(cfg.showCustomer !== false && receipt.customerName) ? `<strong>Customer:</strong> ${escapeHtml(receipt.customerName)}` : ''}
         </div>
         <div style="text-align: right">
-          <strong>Cashier:</strong> ${escapeHtml(receipt.cashier)}<br>
-          <strong>Payment Method:</strong> ${escapeHtml(receipt.paymentMethod.toUpperCase())}
+          ${cfg.showCashier !== false ? `<strong>Cashier:</strong> ${escapeHtml(receipt.cashier)}<br>` : ''}
+          <strong>Payment Method:</strong> ${escapeHtml(receipt.paymentMethod.toUpperCase())}<br>
+          ${(cfg.showOrderType !== false && receipt.orderType && receipt.orderType !== 'retail') ? `<strong>Order:</strong> ${escapeHtml(receipt.orderType.toUpperCase())}<br>` : ''}
+          ${(cfg.showOrderNote !== false && receipt.orderNote) ? `<strong>Note:</strong> ${escapeHtml(receipt.orderNote)}` : ''}
         </div>
       </div>
 
@@ -136,8 +207,8 @@ function generateReceiptHtml(receipt: any) {
                 ${item.size ? `<br><small style="color: #d4af37; font-weight: 600;">(${escapeHtml(item.size)})</small>` : ''}
               </td>
               <td style="text-align: center">${escapeHtml(item.quantity)}</td>
-              <td style="text-align: right">GHS ${escapeHtml(item.unitPrice.toFixed(2))}</td>
-              <td style="text-align: right">GHS ${escapeHtml(item.subtotal.toFixed(2))}</td>
+              <td style="text-align: right">${escapeHtml(cur)} ${escapeHtml(item.unitPrice.toFixed(2))}</td>
+              <td style="text-align: right">${escapeHtml(cur)} ${escapeHtml(item.subtotal.toFixed(2))}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -146,33 +217,50 @@ function generateReceiptHtml(receipt: any) {
       <div class="total-section">
         <div class="total-row">
           <div class="total-label">Subtotal</div>
-          <div class="total-value">GHS ${escapeHtml(receipt.subtotal.toFixed(2))}</div>
+          <div class="total-value">${escapeHtml(cur)} ${escapeHtml(receipt.subtotal.toFixed(2))}</div>
         </div>
         ${receipt.discount > 0 ? `
           <div class="total-row">
             <div class="total-label">Discount</div>
-            <div class="total-value">- GHS ${escapeHtml(receipt.discount.toFixed(2))}</div>
+            <div class="total-value">- ${escapeHtml(cur)} ${escapeHtml(receipt.discount.toFixed(2))}</div>
           </div>
         ` : ''}
-        <div class="total-row">
-          <div class="total-label">Tax (VAT/Levies)</div>
-          <div class="total-value">GHS ${escapeHtml(receipt.tax.toFixed(2))}</div>
-        </div>
+        ${(cfg.showTaxBreakdown !== false && receipt.taxBreakdown && receipt.taxBreakdown.length > 0) ? 
+          receipt.taxBreakdown.map((t: any) => `
+            <div class="total-row">
+              <div class="total-label">${escapeHtml(t.name)} (${escapeHtml(t.rate)}%)</div>
+              <div class="total-value">${escapeHtml(cur)} ${escapeHtml(t.amount.toFixed(2))}</div>
+            </div>
+          `).join('') : `
+            <div class="total-row">
+              <div class="total-label">Tax</div>
+              <div class="total-value">${escapeHtml(cur)} ${escapeHtml(receipt.tax.toFixed(2))}</div>
+            </div>
+          `
+        }
         <div class="total-row grand-total">
           <div class="total-label">GRAND TOTAL</div>
-          <div class="total-value">GHS ${escapeHtml(receipt.total.toFixed(2))}</div>
+          <div class="total-value">${escapeHtml(cur)} ${escapeHtml(receipt.total.toFixed(2))}</div>
         </div>
       </div>
 
       <div class="payment-status">
-        <strong>Amount Paid:</strong> GHS ${escapeHtml((receipt.total + receipt.change).toFixed(2))}<br>
-        <strong>Change Given:</strong> GHS ${escapeHtml(receipt.change.toFixed(2))}
+        <strong>Amount Paid:</strong> ${escapeHtml(cur)} ${escapeHtml((receipt.total + receipt.change).toFixed(2))}<br>
+        <strong>Change Given:</strong> ${escapeHtml(cur)} ${escapeHtml(receipt.change.toFixed(2))}
       </div>
 
       <div class="footer">
         <p>${escapeHtml(receipt.footerMessage)}</p>
         <p>Thank you for your business!</p>
-        <p style="font-size: 10px; margin-top: 20px;">Powered by SikaPOS (DanniTech Solution)</p>
+        ${cfg.showPoweredBy !== false ? `<p style="font-size: 10px; margin-top: 20px;">Powered by SikaPOS (DanniTech Solution)</p>` : ''}
+        ${cfg.showBarcode !== false ? `
+          <div style="margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 20px 12px; background: #f8f8f8; border-radius: 8px; border: 1px solid #eee;">
+            <svg width="220" height="44" viewBox="0 0 220 44" xmlns="http://www.w3.org/2000/svg">
+              ${generateBarcodeSVG(receipt.receiptNumber)}
+            </svg>
+            <div style="font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700; letter-spacing: 3px; color: #444; text-transform: uppercase;">${escapeHtml(receipt.receiptNumber)}</div>
+          </div>
+        ` : ''}
       </div>
     </body>
     </html>

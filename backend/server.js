@@ -1235,13 +1235,16 @@ app.post('/api/portal/login', rateLimit, async (req, res) => {
 
     const inputHashedPin = crypto.createHash('sha256').update(password + PIN_SALT).digest('hex');
     if (inputHashedPin === adminUser.pin) {
-      const token = signToken({ role: 'business', businessId, businessName: license.business_name });
+      const token = signToken({ role: 'business', businessId, businessName: license.business_name, userName: adminUser.name });
       return res.json({ 
         success: true, 
         role: 'business', 
         businessId, 
         businessName: license.business_name, 
+        businessAddress: license.business_address || null,
+        businessPhone: license.business_phone || null,
         businessLogo: license.business_logo || null,
+        userName: adminUser.name,
         token 
       });
     }

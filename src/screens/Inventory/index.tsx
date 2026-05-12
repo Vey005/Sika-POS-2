@@ -323,7 +323,15 @@ export default function InventoryScreen() {
                 </div>
                 <div className={styles.formField}>
                   <label>Category</label>
-                  <input value={editProduct.category || 'General'} onChange={e => setEditProduct(p => ({ ...p!, category: e.target.value }))} placeholder="e.g. Beverages" />
+                  <select value={editProduct.category || 'General'} onChange={e => setEditProduct(p => ({ ...p!, category: e.target.value }))}>
+                    {categories.filter(c => c !== 'All').length > 0 ? (
+                      categories.filter(c => c !== 'All').map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))
+                    ) : (
+                      <option value="General">General</option>
+                    )}
+                  </select>
                 </div>
                 <div className={styles.formField}>
                   <label>Unit</label>

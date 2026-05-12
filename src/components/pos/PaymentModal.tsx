@@ -24,6 +24,8 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
   const [stockWarnings, setStockWarnings] = useState<string[]>([]);
   const [confirmedWarnings, setConfirmedWarnings] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<any>(null);
+  const [creditCustomerQuery, setCreditCustomerQuery] = useState('');
+  const [creditCustomerResults, setCreditCustomerResults] = useState<any[]>([]);
 
   const { 
     items, customerId, customerName, discountAmount, discountType, grandTotal, taxBreakdown,
@@ -284,9 +286,95 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
                 </div>
               </>
             ) : (
-              <p className={styles.momoSubtitle} style={{ color: 'var(--color-warning)' }}>
-                ⚠ No customer selected. Credit requires a customer.
-              </p>
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <p style={{ color: 'var(--color-text-secondary)', marginBottom: '16px', fontSize: '13px' }}>
+                  A customer must be selected for credit sales.
+                </p>
+
+                {/* Inline customer search */}
+                <div style={{ textAlign: 'left', marginBottom: '12px' }}>
+                  <input
+                    autoFocus
+                    placeholder="Search customer name..."
+                    value={creditCustomerQuery}
+                    onChange={e => {
+                      setCreditCustomerQuery(e.target.value);
+                      if (e.target.value.length > 1) {
+                        window.sikapos?.customers.search(e.target.value).then(setCreditCustomerResults);
+                      } else {
+                        setCreditCustomerResults([]);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--color-text-primary)',
+                      fontSize: '14px',
+                    }}
+                  />
+                </div>
+
+                {creditCustomerResults.length > 0 && (
+                  <div style={{
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                    marginBottom: '12px',
+                  }}>
+                    {creditCustomerResults.map((c: any) => (
+                      <div
+                        key={c.id}
+                        onClick={() => {
+                          useCartStore.getState().setCustomer(c.id, c.name, c.credit_balance || 0);
+                          setCreditCustomerQuery('');
+                          setCreditCustomerResults([]);
+                        }}
+                        style={{
+                          padding: '10px 14px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          borderBottom: '1px solid var(--color-border)',
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-elevated)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <span style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{c.name}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{c.phone || ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {creditCustomerQuery.trim() && creditCustomerResults.length === 0 && (
+                  <button
+                    onClick={() => {
+                      useCartStore.getState().setCustomer(0, creditCustomerQuery.trim(), 0);
+                      setCreditCustomerQuery('');
+                      setCreditCustomerResults([]);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--color-gold)',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    + Use "<strong>{creditCustomerQuery}</strong>" as customer
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

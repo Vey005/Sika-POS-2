@@ -80,6 +80,7 @@ const sikapos = {
     printKitchenReceipt: (order: unknown) => ipcRenderer.invoke('printer:kitchen', order),
     printReport: (report: unknown) => ipcRenderer.invoke('printer:report', report),
     testPrint: () => ipcRenderer.invoke('printer:test'),
+    openDrawer: () => ipcRenderer.invoke('printer:open-drawer'),
     saveAsPDF: (data: unknown, type: 'receipt' | 'report') => ipcRenderer.invoke('printer:save-pdf', { data, type }),
   },
 
@@ -109,6 +110,8 @@ const sikapos = {
     save: (user: unknown) => ipcRenderer.invoke('users:save', user),
     delete: (id: number) => ipcRenderer.invoke('users:delete', id),
     login: (pin: string) => ipcRenderer.invoke('users:login', pin),
+    loginById: (userId: number, pin: string) => ipcRenderer.invoke('users:loginById', userId, pin),
+    resetPin: (data: unknown) => ipcRenderer.invoke('users:resetPin', data),
   },
 
   // Secure Store (electron-store)

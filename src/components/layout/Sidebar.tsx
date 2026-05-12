@@ -42,6 +42,19 @@ const navItems = [
     ),
   },
   {
+    path: '/dashboard',
+    label: 'Dashboard',
+    roles: ['cashier'],
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7"></rect>
+        <rect x="14" y="3" width="7" height="7"></rect>
+        <rect x="14" y="14" width="7" height="7"></rect>
+        <rect x="3" y="14" width="7" height="7"></rect>
+      </svg>
+    ),
+  },
+  {
     path: '/reports',
     label: 'Reports',
     roles: ['admin', 'manager'],

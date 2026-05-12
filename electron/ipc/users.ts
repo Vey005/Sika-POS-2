@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../db/database';
 import { hashPin, isPinHashed } from '../utils/crypto';
+import { SecureStore } from '../store/secure-store';
 
 // Brute-force protection
 let failedAttempts = 0;
@@ -154,6 +155,95 @@ export function registerUserHandlers() {
         return { locked: true, secondsLeft: LOCKOUT_DURATION_MS / 1000 };
       }
       return null;
+    }
+  });
+
+  ipcMain.handle('users:loginById', (_event, userId: number, pin: string) => {
+    // Brute-force lockout check
+    const now = Date.now();
+    if (now < lockoutUntil) {
+      const secondsLeft = Math.ceil((lockoutUntil - now) / 1000);
+      return { locked: true, secondsLeft };
+    }
+
+    if (!pin || typeof pin !== 'string' || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      failedAttempts++;
+      if (failedAttempts >= MAX_ATTEMPTS) {
+        lockoutUntil = now + LOCKOUT_DURATION_MS;
+        failedAttempts = 0;
+        return { locked: true, secondsLeft: LOCKOUT_DURATION_MS / 1000 };
+      }
+      return null;
+    }
+
+    const user = db.prepare('SELECT id, name, role, pin FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return null;
+
+    const hashedInput = hashPin(pin);
+
+    if (user.pin === hashedInput) {
+      failedAttempts = 0;
+      return { id: user.id, name: user.name, role: user.role };
+    }
+
+    // Legacy unhashed PIN check
+    if (!isPinHashed(user.pin) && user.pin === pin) {
+      db.prepare('UPDATE users SET pin = ? WHERE id = ?').run(hashedInput, user.id);
+      failedAttempts = 0;
+      return { id: user.id, name: user.name, role: user.role };
+    }
+
+    failedAttempts++;
+    if (failedAttempts >= MAX_ATTEMPTS) {
+      lockoutUntil = now + LOCKOUT_DURATION_MS;
+      failedAttempts = 0;
+      return { locked: true, secondsLeft: LOCKOUT_DURATION_MS / 1000 };
+    }
+    return null;
+  });
+
+  ipcMain.handle('users:resetPin', (_event, { userId, licenseKey, newPin }: { userId: number; licenseKey: string; newPin: string }) => {
+    try {
+      if (!userId || typeof userId !== 'number') {
+        return { success: false, message: 'Invalid user ID.' };
+      }
+      if (!newPin || newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+        return { success: false, message: 'PIN must be exactly 4 digits.' };
+      }
+      if (!licenseKey || typeof licenseKey !== 'string') {
+        return { success: false, message: 'License key is required.' };
+      }
+
+      // Verify license key
+      const secureStore = new SecureStore();
+      const storedKey = secureStore.get('license_key');
+      
+      // Allow bypass in DEV if they provide SIKA-DEMO
+      const isDevDemo = process.env.NODE_ENV !== 'production' && storedKey?.startsWith('SIKA-DEMO');
+      
+      if (storedKey !== licenseKey.trim().toUpperCase() && !isDevDemo) {
+        return { success: false, message: 'Invalid License Key provided.' };
+      }
+
+      const hashedPin = hashPin(newPin);
+      
+      const result = db.prepare(`UPDATE users SET pin = ?, updated_at = datetime('now') WHERE id = ?`).run(hashedPin, userId);
+      
+      if (result.changes === 0) {
+         return { success: false, message: 'User not found.' };
+      }
+
+      // Sync users to cloud
+      const allUsers = db.prepare(
+        'SELECT id, name, pin, role, created_at, updated_at FROM users'
+      ).all();
+      db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
+        .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[users:resetPin] Error:', err);
+      return { success: false, message: err.message || 'Failed to reset PIN.' };
     }
   });
 }

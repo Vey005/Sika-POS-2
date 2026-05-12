@@ -145,16 +145,32 @@ export function registerInventoryHandlers() {
   });
 
   ipcMain.handle('inventory:delete', (_event, id: number) => {
-    db.prepare(`UPDATE products SET is_active = 0, updated_at = datetime('now') WHERE id = ?`).run(id);
-    
-    // Push to sync queue (priority 5 for products)
-    const deletedProduct = db.prepare(`SELECT * FROM products WHERE id = ?`).get(id);
-    db.prepare(`
-      INSERT INTO sync_queue (entity, operation, payload, status, priority)
-      VALUES ('product', 'delete', ?, 'pending', 5)
-    `).run(JSON.stringify(deletedProduct));
+    try {
+      // Professional check: Attempt hard delete first to keep DB clean
+      db.prepare(`DELETE FROM products WHERE id = ?`).run(id);
+      
+      // Push hard delete to sync queue
+      db.prepare(`
+        INSERT INTO sync_queue (entity, operation, payload, status, priority)
+        VALUES ('product', 'delete', ?, 'pending', 5)
+      `).run(JSON.stringify({ id, deleted: true }));
 
-    return { success: true };
+      return { success: true };
+    } catch (err: any) {
+      // Fallback to soft delete if product is referenced by transactions (foreign key constraint)
+      if (err.message.includes('FOREIGN KEY constraint failed')) {
+        db.prepare(`UPDATE products SET is_active = 0, updated_at = datetime('now') WHERE id = ?`).run(id);
+        
+        const deletedProduct = db.prepare(`SELECT * FROM products WHERE id = ?`).get(id);
+        db.prepare(`
+          INSERT INTO sync_queue (entity, operation, payload, status, priority)
+          VALUES ('product', 'delete', ?, 'pending', 5)
+        `).run(JSON.stringify(deletedProduct));
+        
+        return { success: true, message: 'Product soft-deleted because it has sales history.' };
+      }
+      return { success: false, message: err.message };
+    }
   });
 
   ipcMain.handle('inventory:adjustStock', (_event, id: number, delta: number, _reason: string) => {
@@ -173,7 +189,13 @@ export function registerInventoryHandlers() {
   });
 
   ipcMain.handle('inventory:getCategories', (_event) => {
-    return (db.prepare(`SELECT DISTINCT category FROM products WHERE is_active = 1 ORDER BY category`).pluck().all() as string[]);
+    const fromProducts = db.prepare(`SELECT DISTINCT category FROM products WHERE is_active = 1 ORDER BY category`).pluck().all() as string[];
+    const customCatsStr = db.prepare(`SELECT value FROM settings WHERE key = 'custom_categories'`).pluck().get() as string;
+    const customCats = customCatsStr ? customCatsStr.split(',').map(c => c.trim()).filter(Boolean) : [];
+    
+    // Merge and deduplicate
+    const allCats = Array.from(new Set([...fromProducts, ...customCats])).sort();
+    return allCats;
   });
 
   ipcMain.handle('inventory:getSummary', (_event) => {
@@ -258,9 +280,10 @@ export function registerInventoryHandlers() {
           category = excluded.category,
           unit_price = excluded.unit_price,
           cost_price = excluded.cost_price,
-          stock_qty = products.stock_qty + excluded.stock_qty,
+          stock_qty = excluded.stock_qty,
           is_inventory = excluded.is_inventory,
           size = excluded.size,
+          is_active = 1,
           updated_at = datetime('now')
       `);
 
@@ -305,8 +328,14 @@ export function registerInventoryHandlers() {
         return { success: true, count: 0 };
       }
       
-      // Soft delete all products
-      const result = db.prepare('UPDATE products SET is_active = 0 WHERE is_active = 1').run();
+      // Professional check: Hard delete products with no transaction history
+      try {
+        db.prepare('DELETE FROM products WHERE id NOT IN (SELECT DISTINCT product_id FROM transaction_items WHERE product_id IS NOT NULL)').run();
+      } catch (e) {
+        console.warn('[Inventory Clear] Partial hard delete failed');
+      }
+      // Soft delete any remaining active products
+      db.prepare('UPDATE products SET is_active = 0 WHERE is_active = 1').run();
       
       // Push delete operations to sync queue for each product (priority 5)
       const insert = db.prepare(`

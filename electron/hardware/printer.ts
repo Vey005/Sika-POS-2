@@ -1,4 +1,4 @@
-import { buildReceiptBytes, buildReportBytes, buildKitchenReceiptBytes } from './esc-pos';
+import { buildReceiptBytes, buildReportBytes, buildKitchenReceiptBytes, buildOpenDrawerBytes } from './esc-pos';
 
 // Safely require usb module in case native bindings failed to build
 let usb: any = null;
@@ -91,4 +91,9 @@ export function listPrinters() {
     id: `${d.deviceDescriptor.idVendor}:${d.deviceDescriptor.idProduct}`,
     name: `USB Printer (${d.deviceDescriptor.idVendor.toString(16)}:${d.deviceDescriptor.idProduct.toString(16)})`
   }));
+}
+
+export async function openDrawer(printerDeviceId?: string): Promise<void> {
+  const data = buildOpenDrawerBytes();
+  return _printBytes(data, printerDeviceId);
 }

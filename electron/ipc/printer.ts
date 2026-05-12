@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { listPrinters, printReceipt, printReport, testPrint, printKitchenReceipt } from '../hardware/printer';
+import { listPrinters, printReceipt, printReport, testPrint, printKitchenReceipt, openDrawer } from '../hardware/printer';
 import { SecureStore } from '../store/secure-store';
 import { saveAsPDF } from '../utils/pdf-generator';
 
@@ -32,6 +32,12 @@ export function registerPrinterHandlers(secureStore: SecureStore) {
     const printerDeviceId = secureStore.get('printerDeviceId');
     
     await testPrint(printerDeviceId);
+    return { success: true };
+  });
+
+  ipcMain.handle('printer:open-drawer', async () => {
+    const printerDeviceId = secureStore.get('printerDeviceId');
+    await openDrawer(printerDeviceId);
     return { success: true };
   });
 

@@ -52,7 +52,7 @@ export class SyncManager {
   private async backfillUsers() {
     const db = getDb();
     try {
-      console.log('[SyncManager] Queuing all users for portal sync...');
+      console.log('[Sync] Queuing users for portal sync.');
       // We push all users as a single 'users' entity payload including hashed PINs
       const allUsers = db.prepare('SELECT id, name, pin, role, created_at, updated_at FROM users').all();
       
@@ -73,7 +73,7 @@ export class SyncManager {
       const bizPhone = db.prepare(`SELECT value FROM settings WHERE key = 'business_phone'`).pluck().get() as string;
       const bizLogo = await this.secureStore.get('business_logo');
 
-      console.log('[SyncManager] Queuing business info for initial sync...');
+      console.log('[Sync] Queuing business info for sync.');
 
       db.prepare(`
         INSERT INTO sync_queue (entity, operation, payload, status, priority)
@@ -130,7 +130,7 @@ export class SyncManager {
       // Clear any existing pending transaction items in the queue to avoid duplicates
       db.prepare(`DELETE FROM sync_queue WHERE entity = 'transaction' AND status = 'pending'`).run();
 
-      console.log(`[SyncManager] Re-syncing ${allTx.length} transactions for data accuracy...`);
+      console.log('[Sync] Re-syncing transactions for data accuracy.');
 
       const insert = db.prepare(`
         INSERT INTO sync_queue (entity, operation, payload, status, priority)
@@ -181,7 +181,7 @@ export class SyncManager {
       });
 
       insertAll();
-      console.log(`[SyncManager] Re-sync complete. ${allTx.length} transactions queued.`);
+      console.log('[Sync] Transaction re-sync complete.');
     } catch (err: any) {
       console.error('[SyncManager] Backfill failed:', err.message);
     }
@@ -211,7 +211,7 @@ export class SyncManager {
         return;
       }
 
-      console.log(`[SyncManager] Backfilling ${unsynced.length} historical products...`);
+      console.log('[Sync] Backfilling historical products.');
 
       const insert = db.prepare(`
         INSERT INTO sync_queue (entity, operation, payload, status)
@@ -225,7 +225,7 @@ export class SyncManager {
       });
 
       insertAll();
-      console.log(`[SyncManager] Backfill complete. ${unsynced.length} products queued.`);
+      console.log('[Sync] Product backfill complete.');
     } catch (err: any) {
       console.error('[SyncManager] Product backfill failed:', err.message);
     }
@@ -248,7 +248,7 @@ export class SyncManager {
       `).all(lastSyncTs) as any[];
       if (allCustomers.length === 0) return;
 
-      console.log(`[SyncManager] Backfilling ${allCustomers.length} customers...`);
+      console.log('[Sync] Backfilling customers.');
       const insert = db.prepare(`
         INSERT INTO sync_queue (entity, operation, payload, status, priority)
         VALUES ('customer', 'update', ?, 'pending', 10)
@@ -281,7 +281,7 @@ export class SyncManager {
       `).all(lastSyncTs) as any[];
       if (allLogs.length === 0) return;
 
-      console.log(`[SyncManager] Backfilling ${allLogs.length} credit payments...`);
+      console.log('[Sync] Backfilling credit payments.');
       const insert = db.prepare(`
         INSERT INTO sync_queue (entity, operation, payload, status, priority)
         VALUES ('credit_payment', 'create', ?, 'pending', 10)
@@ -300,11 +300,11 @@ export class SyncManager {
   private async pullUpdatedCustomers() {
     const licenseKey = await this.secureStore.get('license_key');
     const safeKey = licenseKey ? (licenseKey.length > 8 ? `${licenseKey.substring(0, 4)}****${licenseKey.substring(licenseKey.length - 4)}` : '***') : 'undefined';
-    console.log(`[SyncManager] Pull check: licenseKey=${safeKey}, isSyncing=${this.isSyncing}`);
+    // Pull check — no data logged for privacy
     if (!licenseKey || this.isSyncing) return;
 
     try {
-      console.log('[SyncManager] Pulling updated customer balances from cloud...');
+      console.log('[Sync] Pulling customer updates from cloud.');
       const response = await axios.get(`${API_BASE_URL}/v1/sync/customers`, {
         headers: { Authorization: `Bearer ${licenseKey}` }
       });
@@ -334,9 +334,9 @@ export class SyncManager {
               // Only update if cloud data is newer than local
               if (cloudTime > localTime) {
                 update.run(cc.credit_balance, cc.credit_limit || 0, cc.loyalty_points, cc.total_spent, cc.updated_at, cc.local_id);
-                console.log(`[SyncManager] ✓ Updated customer ${cc.local_id} from cloud (cloud newer)`);
+                // Customer updated from cloud
               } else {
-                console.log(`[SyncManager] ✗ Skipped customer ${cc.local_id}: local is newer or same`);
+                // Local data is newer, skipped
               }
             }
           }
@@ -355,7 +355,7 @@ export class SyncManager {
             }
           }
         })();
-        console.log(`[SyncManager] Pulled ${cloudCustomers.length} customers and ${response.data.data.payments?.length || 0} payments from cloud.`);
+        console.log('[Sync] Cloud pull complete.');
       }
     } catch (err: any) {
       console.error('[SyncManager] Pull customers failed:', err.message);
@@ -384,7 +384,7 @@ export class SyncManager {
 
     this.isSyncing = true;
     this.setStatus('syncing');
-    console.log(`[SyncManager] Sync started. ${pendingCount} items pending.`);
+    console.log('[Sync] Sync cycle started.');
 
     try {
       // Sync by priority: lower number = higher priority (1 = transactions, 5 = products, 10 = others)
@@ -474,7 +474,7 @@ export class SyncManager {
       }
 
       this.setStatus('synced');
-      console.log('[SyncManager] Sync completed successfully.');
+      console.log('[Sync] Sync completed.');
     } catch (err: any) {
       if (err.code !== 'ENOTFOUND' && err.code !== 'ECONNREFUSED') {
         console.error('[SyncManager] Sync process aborted due to error:', err.message);
@@ -492,7 +492,7 @@ export class SyncManager {
     this.setStatus('syncing');
 
     try {
-      console.log('[SyncManager] Starting full cloud data recovery...');
+      console.log('[Sync] Starting cloud data recovery.');
       const businessId = this.secureStore.get('license_key') || 'default_shop';
       const response = await axios.get(`${API_BASE_URL}/v1/sync/pull`, {
         headers: {
@@ -549,7 +549,7 @@ export class SyncManager {
       restoreTransaction();
 
       this.setStatus('synced');
-      console.log(`[SyncManager] Recovery complete. ${totalRestored} items restored.`);
+      console.log('[Sync] Recovery complete.');
       return { success: true, count: totalRestored };
     } catch (err: any) {
       console.error('[SyncManager] Cloud recovery failed:', err.message);

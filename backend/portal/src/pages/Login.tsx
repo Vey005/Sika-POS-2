@@ -28,9 +28,18 @@ export default function Login() {
       if (!res.ok) throw new Error(data.error || 'Login failed');
       
       if (data.role === 'admin') {
-        login('admin', undefined, undefined, data.token);
+        login('admin', undefined, undefined, data.token, undefined, data.name);
       } else {
-        login('business', data.businessId, data.businessName, data.token, data.businessLogo);
+        login(
+          'business', 
+          data.businessId, 
+          data.businessName, 
+          data.token, 
+          data.businessLogo, 
+          data.userName, 
+          data.businessAddress, 
+          data.businessPhone
+        );
       }
     } catch (err: any) {
       setError(err.message);

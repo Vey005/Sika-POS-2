@@ -114,9 +114,10 @@ export function registerSalesHandlers() {
       if (!product) {
         throw new Error(`Inventory product not found: ${item.product_name} (ID ${item.product_id})`);
       }
-      if (product.stock_qty < item.quantity) {
-        throw new Error(`Insufficient stock for "${item.product_name}". Available: ${product.stock_qty}.`);
-      }
+      // Allow negative stock to support "Proceed anyway" flow and real-world POS usage
+      // if (product.stock_qty < item.quantity) {
+      //   throw new Error(`Insufficient stock for "${item.product_name}". Available: ${product.stock_qty}.`);
+      // }
     }
 
     for (const item of data.items) {
@@ -230,7 +231,7 @@ export function registerSalesHandlers() {
           `).run(grandTotal, grandTotal, Math.floor(grandTotal), data.customer_id);
           db.prepare(`
             INSERT INTO credit_log (customer_id, transaction_id, amount, type, note)
-            VALUES (?, ?, ?, 'credit', 'Sale on credit')
+            VALUES (?, ?, ?, 'credit_sale', 'Sale on credit')
           `).run(data.customer_id, transactionId, grandTotal);
         } else {
           db.prepare(`
@@ -289,7 +290,7 @@ export function registerSalesHandlers() {
     return createTx();
   });
 
-  ipcMain.handle('sales:getAll', (_event, filters?: { from?: string; to?: string; status?: string }) => {
+  ipcMain.handle('sales:getAll', (_event, filters?: { from?: string; to?: string; status?: string; cashier_name?: string }) => {
     let sql = `
       SELECT t.*, COUNT(ti.id) as item_count
       FROM transactions t
@@ -301,6 +302,7 @@ export function registerSalesHandlers() {
     if (filters?.from) { wheres.push("t.created_at >= ?"); params.push(`${filters.from} 00:00:00`); }
     if (filters?.to) { wheres.push("t.created_at <= ?"); params.push(`${filters.to} 23:59:59`); }
     if (filters?.status) { wheres.push("t.status = ?"); params.push(filters.status); }
+    if (filters?.cashier_name) { wheres.push("t.cashier_name = ?"); params.push(filters.cashier_name); }
 
     if (wheres.length) sql += ` WHERE ${wheres.join(' AND ')}`;
     sql += ` GROUP BY t.id ORDER BY t.created_at DESC LIMIT 200`;
@@ -387,7 +389,7 @@ export function registerSalesHandlers() {
     }
   }
 
-  ipcMain.handle('sales:getSummary', (_event, filters?: { from?: string; to?: string }) => {
+  ipcMain.handle('sales:getSummary', (_event, filters?: { from?: string; to?: string; cashier_name?: string }) => {
     let sql = `
       SELECT
         COUNT(*) as transaction_count,
@@ -417,6 +419,11 @@ export function registerSalesHandlers() {
       }
     }
 
+    if (filters?.cashier_name) {
+      sql += " AND cashier_name = ?";
+      params.push(filters.cashier_name);
+    }
+
     // 0. LOCAL CLEANUP: Remove duplicate credit_payments (handling sync retries or double-clicks)
     // Keep only the oldest one for each amount/timestamp pair
     db.prepare(`
@@ -432,23 +439,15 @@ export function registerSalesHandlers() {
 
     const summary = db.prepare(sql).get(...params) as any;
     
-    // DEBUG LOGS
-    const licenseKey = db.prepare(`SELECT value FROM settings WHERE key = 'license_key'`).pluck().get() as string;
-    const totalCount = db.prepare("SELECT COUNT(*) as count FROM credit_payments").get() as { count: number };
-    const latestPayment = db.prepare("SELECT created_at FROM credit_payments ORDER BY created_at DESC LIMIT 1").get() as any;
-    
-    console.log(`[DEBUG] License=${licenseKey}, credit_payments stats: Total Rows=${totalCount.count}, Latest Date=${latestPayment?.created_at || 'None'}`);
-    console.log(`[DEBUG] System Date: ${new Date().toISOString().split('T')[0]}`);
+    // Revenue calculation internals — no debug logging for privacy
 
     // 1. Get payments for the current period (must match transaction filter logic)
     let paymentSql = `SELECT COALESCE(SUM(amount), 0) as total FROM credit_payments`;
     const paymentParams: string[] = [];
     
     if (!filters || (!filters.from && !filters.to)) {
-      // Default to today's payments
       paymentSql += " WHERE created_at >= date('now', 'start of day')";
     } else {
-      // Apply explicit date range if provided
       if (filters.from) {
         paymentSql += " WHERE created_at >= ?";
         paymentParams.push(`${filters.from} 00:00:00`);
@@ -460,7 +459,6 @@ export function registerSalesHandlers() {
     }
     
     const payments = db.prepare(paymentSql).get(...paymentParams) as { total: number };
-    console.log(`[DEBUG] Payments for period: query=${paymentSql}, params=${JSON.stringify(paymentParams)}, result=${payments.total}`);
 
     // 2. Revenue Recognition
     // total_revenue now uses paid_amount column which attributes revenue to the original date of sale.
@@ -476,7 +474,7 @@ export function registerSalesHandlers() {
     const totalDebtResult = db.prepare("SELECT COALESCE(SUM(credit_balance), 0) as total FROM customers").get() as { total: number };
     summary.outstanding_credit = Number(totalDebtResult.total) || 0;
 
-    console.log(`[IPC] Calculated Realized Revenue: ${summary.total_revenue} (Credit Issued Today: ${summary.credit_total}, Outstanding Credit: ${summary.outstanding_credit})`);
+    console.log('[Sales] Revenue summary calculated.');
 
     return summary;
   });
@@ -492,7 +490,7 @@ export function registerSalesHandlers() {
   });
 
   ipcMain.handle('sales:getDailyReportData', (_event, date: string) => {
-    console.log(`[IPC] Fetching daily report data for date: ${date}`);
+    console.log('[Sales] Generating daily report.');
     try {
       const summary = db.prepare(`
         SELECT
@@ -555,7 +553,7 @@ export function registerSalesHandlers() {
         ORDER BY total_qty DESC
       `).all(`${date}%`);
 
-      console.log(`[IPC] Found ${transactions.length} transactions for ${date}`);
+      console.log(`[Sales] Daily report generated: ${transactions.length} transactions.`);
       return { summary, transactions, itemSummary };
     } catch (err: any) {
       console.error(`[IPC] Error fetching report data for ${date}:`, err);

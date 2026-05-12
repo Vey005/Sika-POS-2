@@ -1,10 +1,6 @@
 import { create } from 'zustand';
 
-// Ghana Tax Rates 2024
-const VAT = 0.125;
-const NHIL = 0.025;
-const GETFUND = 0.025;
-const COVID = 0.01;
+import { useAuthStore } from './auth';
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -14,11 +10,19 @@ export function calcTax(subtotal: number, taxCategory: string): TaxBreakdown {
   if (taxCategory !== 'standard' || subtotal <= 0) {
     return { subtotal, vat: 0, nhil: 0, getfund: 0, covid: 0, totalTax: 0, grandTotal: subtotal };
   }
-  const vat = subtotal * VAT;
-  const nhil = subtotal * NHIL;
-  const getfund = subtotal * GETFUND;
-  const covid = subtotal * COVID;
+  
+  const taxConfig = useAuthStore.getState().taxConfig;
+  const getRate = (id: string) => {
+    const t = taxConfig.find(x => x.id === id);
+    return t ? t.rate / 100 : 0;
+  };
+
+  const vat = subtotal * getRate('vat');
+  const nhil = subtotal * getRate('nhil');
+  const getfund = subtotal * getRate('getfund');
+  const covid = subtotal * getRate('covid');
   const totalTax = vat + nhil + getfund + covid;
+  
   return {
     subtotal,
     vat: round2(vat),

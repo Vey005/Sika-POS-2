@@ -55,7 +55,7 @@ export function registerCustomerHandlers() {
   });
 
   ipcMain.handle('customers:addCreditPayment', (_event, customerId: number, amount: number, note: string, method: string = 'cash') => {
-    console.log(`[IPC] Recording credit payment: customer=${customerId}, amount=${amount}, method=${method}`);
+    console.log('[Payments] Processing credit payment.');
     try {
       let result: any = null;
 
@@ -68,7 +68,7 @@ export function registerCustomerHandlers() {
 
         if (recent) {
           // Duplicate detected - return current customer without making any changes
-          console.log('[IPC] Duplicate payment detected within 30s window. Skipping.');
+          console.log('[Payments] Duplicate payment detected. Skipping.');
           const currentCustomer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
           result = { success: true, message: 'Duplicate payment ignored.', customer: currentCustomer };
           return;
@@ -94,7 +94,7 @@ export function registerCustomerHandlers() {
           ORDER BY created_at ASC
         `).all(customerId) as Array<{ id: number; grand_total: number; paid_amount: number; receipt_number: string }>;
 
-        console.log(`[IPC] Found ${debtTxs.length} debt transactions for customer ${customerId}`);
+        console.log(`[Payments] Allocating payment across ${debtTxs.length} outstanding transactions.`);
 
         let remainingPayment = amount;
         for (const tx of debtTxs) {
@@ -110,7 +110,7 @@ export function registerCustomerHandlers() {
           const newPaidAmount = Math.round((alreadyPaid + paymentToApply) * 100) / 100;
           const newStatus = newPaidAmount >= txTotal ? 'completed' : 'debt';
 
-          console.log(`[IPC] Allocation for ${tx.receipt_number}: applying=${paymentToApply}, newPaid=${newPaidAmount}, status=${newStatus}`);
+          // Payment allocated silently for privacy
           
           db.prepare(`UPDATE transactions SET paid_amount = ?, status = ?, updated_at = datetime('now') WHERE id = ?`)
             .run(newPaidAmount, newStatus, tx.id);
@@ -141,10 +141,10 @@ export function registerCustomerHandlers() {
         result = { success: true, customer: updatedCustomer };
       });
       tx();
-      console.log(`[IPC] Credit payment recorded successfully. New balance: ${result?.customer?.credit_balance}`);
+      console.log('[Payments] Credit payment recorded successfully.');
       return result;
     } catch (err: any) {
-      console.error(`[IPC] Error recording credit payment:`, err);
+      console.error('[Payments] Error recording credit payment:', err.message);
       return { success: false, message: err.message };
     }
   });

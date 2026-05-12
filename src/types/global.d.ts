@@ -58,6 +58,7 @@ interface Window {
       printKitchenReceipt: (order: any) => Promise<void>;
       printReport: (report: any) => Promise<void>;
       testPrint: () => Promise<void>;
+      openDrawer: () => Promise<void>;
       saveAsPDF: (data: any, type: 'receipt' | 'report') => Promise<{ success: boolean; filePath?: string }>;
     };
     scanner: {
@@ -73,6 +74,8 @@ interface Window {
       save: (user: { id?: number; name: string; pin: string; role: string }) => Promise<{ success: boolean; id?: number; message?: string }>;
       delete: (id: number) => Promise<{ success: boolean; message?: string }>;
       login: (pin: string) => Promise<{ id: number; name: string; role: string } | { locked: true; secondsLeft: number } | null>;
+      loginById: (userId: number, pin: string) => Promise<{ id: number; name: string; role: string } | { locked: true; secondsLeft: number } | null>;
+      resetPin: (data: { userId: number; licenseKey: string; newPin: string }) => Promise<{ success: boolean; message?: string }>;
     };
     secureStore: {
       get: (key: string) => Promise<any>;
@@ -168,6 +171,7 @@ interface TransactionFilters {
   from?: string;
   to?: string;
   status?: string;
+  cashier_name?: string;
 }
 
 interface Transaction {

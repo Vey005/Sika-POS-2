@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { formatCurrency } from '../../utils/format';
+import Barcode from '../common/Barcode';
 import styles from './TransactionDetailModal.module.css';
 import { useAuthStore } from '../../store/auth';
 
@@ -9,17 +10,29 @@ interface Props {
 }
 
 export default function TransactionDetailModal({ transactionId, onClose }: Props) {
-  const { businessName, businessLogo, receiptFooter } = useAuthStore();
+  const { businessName, businessLogo, receiptFooter, receiptConfig } = useAuthStore();
   const [tx, setTx] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [bizDetails, setBizDetails] = useState({ address: '', phone: '', tin: '' });
+
+  const rc = receiptConfig;
+  const cur = rc.currency || 'GHS';
 
   useEffect(() => {
     async function load() {
       if (!window.sikapos) return;
       try {
-        const data = await window.sikapos.sales.getById(transactionId);
+        const [data, biz] = await Promise.all([
+          window.sikapos.sales.getById(transactionId),
+          window.sikapos.settings.getBusiness()
+        ]);
         setTx(data);
+        setBizDetails({
+          address: biz.business_address || '',
+          phone: biz.business_phone || '',
+          tin: biz.tin || '',
+        });
       } catch (err) {
         console.error('Failed to load transaction details:', err);
       } finally {
@@ -34,20 +47,33 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
     setIsPrinting(true);
     try {
       const receiptData = {
-        businessName: 'SikaPOS', // Ideally fetch from settings
+        businessName,
+        businessLogo,
+        businessAddress: bizDetails.address,
+        businessPhone: bizDetails.phone,
+        tin: bizDetails.tin,
         cashier: tx.cashier_name,
         date: new Date(tx.created_at).toLocaleDateString('en-GH', {
           year: 'numeric', month: 'long', day: 'numeric',
         }),
+        time: new Date(tx.created_at).toLocaleTimeString('en-GH', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        }),
         receiptNumber: tx.receipt_number,
         items: tx.items.map((i: any) => ({
           name: i.product_name,
+          size: i.product_size,
           quantity: i.quantity,
           unitPrice: i.unit_price,
           subtotal: i.line_total
         })),
         subtotal: tx.subtotal,
         tax: tx.total_tax,
+        taxBreakdown: useAuthStore.getState().taxConfig.map(t => ({
+          name: t.name,
+          rate: t.rate,
+          amount: tx[`tax_${t.id}`] || 0
+        })).filter(t => t.amount > 0),
         discount: tx.discount_amount || 0,
         total: tx.grand_total,
         paymentMethod: tx.payment_method,
@@ -56,7 +82,9 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
         customerName: tx.customer_name,
         orderType: tx.order_type,
         orderNote: tx.order_note,
-        footerMessage: receiptFooter || 'Reprinted Receipt'
+        footerMessage: receiptFooter || 'Reprinted Receipt',
+        currency: cur,
+        config: rc,
       };
 
       await window.sikapos.printer.printReceipt(receiptData);
@@ -71,18 +99,33 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
     if (!tx || !window.sikapos) return;
     try {
       const receiptData = {
-        businessName: 'SikaPOS',
+        businessName,
+        businessLogo,
+        businessAddress: bizDetails.address,
+        businessPhone: bizDetails.phone,
+        tin: bizDetails.tin,
         cashier: tx.cashier_name,
-        date: new Date(tx.created_at).toLocaleDateString('en-GH'),
+        date: new Date(tx.created_at).toLocaleDateString('en-GH', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        }),
+        time: new Date(tx.created_at).toLocaleTimeString('en-GH', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        }),
         receiptNumber: tx.receipt_number,
         items: tx.items.map((i: any) => ({
           name: i.product_name,
+          size: i.product_size,
           quantity: i.quantity,
           unitPrice: i.unit_price,
           subtotal: i.line_total
         })),
         subtotal: tx.subtotal,
         tax: tx.total_tax,
+        taxBreakdown: useAuthStore.getState().taxConfig.map(t => ({
+          name: t.name,
+          rate: t.rate,
+          amount: tx[`tax_${t.id}`] || 0
+        })).filter(t => t.amount > 0),
         discount: tx.discount_amount || 0,
         total: tx.grand_total,
         paymentMethod: tx.payment_method,
@@ -91,7 +134,9 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
         customerName: tx.customer_name,
         orderType: tx.order_type,
         orderNote: tx.order_note,
-        footerMessage: receiptFooter || 'Reprinted Receipt'
+        footerMessage: receiptFooter || 'Reprinted Receipt',
+        currency: cur,
+        config: rc,
       };
       await window.sikapos.printer.saveAsPDF(receiptData, 'receipt');
     } catch (err: any) {
@@ -121,55 +166,155 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
 
         <div className={styles.body}>
           <div className={styles.receiptPreview}>
+            {/* Header section matching ReceiptModal */}
             <div className={styles.receiptHeader}>
-              <h3>{tx.receipt_number}</h3>
-              <p>{new Date(tx.created_at).toLocaleString('en-GH')}</p>
-              <p>Cashier: {tx.cashier_name}</p>
-              {tx.customer_name && <p>Customer: {tx.customer_name}</p>}
-              {tx.order_type && tx.order_type !== 'retail' && <p>Order Type: {tx.order_type.toUpperCase()}</p>}
-              {tx.order_note && <p>Note: {tx.order_note}</p>}
+              {rc.showLogo && businessLogo && (
+                <img 
+                  src={businessLogo} 
+                  alt="Business Logo" 
+                  className={styles.logo}
+                />
+              )}
+              <h3 className={styles.receiptBusinessName}>{businessName}</h3>
+              {rc.showAddress && bizDetails.address && (
+                <p className={styles.receiptMeta}>{bizDetails.address}</p>
+              )}
+              {rc.showPhone && bizDetails.phone && (
+                <p className={styles.receiptMeta}>Tel: {bizDetails.phone}</p>
+              )}
+              {rc.showTIN && bizDetails.tin && (
+                <p className={styles.receiptMeta}>TIN: {bizDetails.tin}</p>
+              )}
             </div>
 
             <div className={styles.divider} />
 
+            {/* Transaction meta matching ReceiptModal */}
+            <div className={styles.metaGrid}>
+              <div className={styles.metaRow}>
+                <span>Receipt #</span>
+                <span>{tx.receipt_number}</span>
+              </div>
+              <div className={styles.metaRow}>
+                <span>Date</span>
+                <span>{new Date(tx.created_at).toLocaleDateString('en-GH')}</span>
+              </div>
+              <div className={styles.metaRow}>
+                <span>Time</span>
+                <span>{new Date(tx.created_at).toLocaleTimeString('en-GH')}</span>
+              </div>
+              {rc.showCashier && (
+                <div className={styles.metaRow}>
+                  <span>Cashier</span>
+                  <span>{tx.cashier_name}</span>
+                </div>
+              )}
+              {rc.showCustomer && tx.customer_name && (
+                <div className={styles.metaRow}>
+                  <span>Customer</span>
+                  <span>{tx.customer_name}</span>
+                </div>
+              )}
+              {rc.showOrderType && tx.order_type !== 'retail' && (
+                <div className={styles.metaRow}>
+                  <span>Order</span>
+                  <span>{tx.order_type?.toUpperCase()}</span>
+                </div>
+              )}
+              {rc.showOrderNote && tx.order_note && (
+                <div className={styles.metaRow}>
+                  <span>Note</span>
+                  <span>{tx.order_note}</span>
+                </div>
+              )}
+            </div>
+
+            <div className={styles.divider} />
+
+            {/* Items table header */}
+            <div className={styles.itemsHeader}>
+              <span>Item</span>
+              <span>Qty</span>
+              <span>Price</span>
+              <span>Total</span>
+            </div>
+
+            {/* Items List */}
             <div className={styles.itemsList}>
               {tx.items.map((item: any, idx: number) => (
                 <div key={idx} className={styles.itemRow}>
-                  <div>
-                    <p className={styles.itemName}>{item.product_name}</p>
-                    <p className={styles.itemQty}>{item.quantity} x GHS {formatCurrency(item.unit_price)}</p>
-                  </div>
-                  <p className={styles.itemTotal}>GHS {formatCurrency(item.line_total)}</p>
+                  <span className={styles.itemName}>
+                    {item.product_name}
+                    {item.product_size && <em className={styles.itemSize}>({item.product_size})</em>}
+                  </span>
+                  <span className={styles.itemQty}>{item.quantity}</span>
+                  <span className={styles.itemPrice}>{formatCurrency(item.unit_price)}</span>
+                  <span className={styles.itemTotal}>{formatCurrency(item.line_total)}</span>
                 </div>
               ))}
             </div>
 
-            <div className={styles.divider} />
+            <div className={styles.dividerBold} />
 
+            {/* Totals section */}
             <div className={styles.totals}>
               <div className={styles.totalRow}>
                 <span>Subtotal</span>
-                <span>GHS {formatCurrency(tx.subtotal)}</span>
+                <span>{cur} {formatCurrency(tx.subtotal)}</span>
               </div>
               {tx.discount_amount > 0 && (
                 <div className={styles.totalRow}>
                   <span>Discount</span>
-                  <span>- GHS {formatCurrency(tx.discount_amount)}</span>
+                  <span className={styles.discountValue}>- {cur} {formatCurrency(tx.discount_amount)}</span>
                 </div>
               )}
-              <div className={styles.totalRow}>
-                <span>Tax</span>
-                <span>GHS {formatCurrency(tx.total_tax)}</span>
-              </div>
+              {rc.showTaxBreakdown && useAuthStore.getState().taxConfig.map(t => {
+                const amount = tx[`tax_${t.id}`] || 0;
+                if (amount <= 0 || t.rate <= 0) return null;
+                return (
+                  <div key={t.id} className={styles.totalRow}>
+                    <span>{t.name} ({t.rate}%)</span>
+                    <span>{cur} {formatCurrency(amount)}</span>
+                  </div>
+                );
+              })}
+              {!rc.showTaxBreakdown && tx.total_tax > 0 && (
+                <div className={styles.totalRow}>
+                  <span>Tax</span>
+                  <span>{cur} {formatCurrency(tx.total_tax)}</span>
+                </div>
+              )}
               <div className={`${styles.totalRow} ${styles.grandTotal}`}>
-                <span>Total</span>
-                <span>GHS {formatCurrency(tx.grand_total)}</span>
+                <span>TOTAL</span>
+                <span>{cur} {formatCurrency(tx.grand_total)}</span>
               </div>
             </div>
 
+            <div className={styles.divider} />
+
+            {/* Payment and Footer info */}
             <div className={styles.paymentInfo}>
-              <p>Payment: {tx.payment_method.toUpperCase()}</p>
-              <p>Status: {tx.status.toUpperCase()}</p>
+              <div className={styles.metaRow}>
+                <span>Method</span>
+                <span>{tx.payment_method.toUpperCase()}</span>
+              </div>
+              <div className={styles.metaRow}>
+                <span>Status</span>
+                <span>{tx.status.toUpperCase()}</span>
+              </div>
+            </div>
+
+            <div className={styles.footerInfo}>
+              <p className={styles.footerMessage}>{receiptFooter || 'Thank you for shopping with us!'}</p>
+              {rc.showPoweredBy && (
+                <p className={styles.poweredBy}>Powered by SikaPOS (DanniTech Solution)</p>
+              )}
+              {rc.showBarcode && (
+                <div className={styles.barcodeContainer}>
+                  <Barcode value={tx.receipt_number} width={180} height={40} className={styles.barcodeCanvas} />
+                  <span className={styles.barcodeLabel}>{tx.receipt_number}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

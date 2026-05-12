@@ -28,6 +28,28 @@ export default function SettingsScreen() {
     notification_provider: 'whatsapp',
     sms_api_key: '',
     sms_sender_id: '',
+    custom_categories: '',
+  });
+  const [taxConfig, setTaxConfig] = useState([
+    { id: 'vat', name: 'VAT', rate: 12.5 },
+    { id: 'nhil', name: 'NHIL', rate: 2.5 },
+    { id: 'getfund', name: 'GETFund', rate: 2.5 },
+    { id: 'covid', name: 'COVID Levy', rate: 1.0 }
+  ]);
+  const [receiptConfig, setReceiptConfig] = useState({
+    showLogo: true,
+    showCashier: true,
+    showCustomer: true,
+    showTaxBreakdown: true,
+    showOrderType: true,
+    showOrderNote: true,
+    showPoweredBy: true,
+    showAddress: true,
+    showPhone: true,
+    showTIN: true,
+    showBarcode: true,
+    currency: 'GHS',
+    paperSize: '80mm',
   });
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
   const [saving, setSaving] = useState(false);
@@ -56,7 +78,14 @@ export default function SettingsScreen() {
         notification_provider: biz.notification_provider || 'whatsapp',
         sms_api_key: biz.sms_api_key || '',
         sms_sender_id: biz.sms_sender_id || '',
+        custom_categories: biz.custom_categories || '',
       }));
+      if (biz.tax_config) {
+        try { setTaxConfig(JSON.parse(biz.tax_config)); } catch(e) {}
+      }
+      if (biz.receipt_config) {
+        try { setReceiptConfig(rc => ({ ...rc, ...JSON.parse(biz.receipt_config) })); } catch(e) {}
+      }
     });
     if (window.sikapos.printer) {
       window.sikapos.printer.listPrinters().then(setPrinters);
@@ -89,10 +118,15 @@ export default function SettingsScreen() {
         notification_provider: settings.notification_provider as 'whatsapp' | 'sms',
         sms_api_key: settings.sms_api_key,
         sms_sender_id: settings.sms_sender_id,
+        custom_categories: settings.custom_categories,
+        tax_config: JSON.stringify(taxConfig),
+        receipt_config: JSON.stringify(receiptConfig),
       });
       await window.sikapos.secureStore.set('printerDeviceId', settings.printerDeviceId);
       setBusinessInfo(settings.business_name);
       useAuthStore.getState().setReceiptFooter(settings.receipt_footer);
+      useAuthStore.getState().setTaxConfig(taxConfig);
+      useAuthStore.getState().setReceiptConfig(receiptConfig);
 
       // --- Sync Business Info (Name & Logo) to Cloud Portal via Sync Queue ---
       const businessLogo = await window.sikapos?.secureStore.get('business_logo');
@@ -398,9 +432,124 @@ export default function SettingsScreen() {
                   <input value={settings.receipt_footer} onChange={e => setSettings(s => ({ ...s, receipt_footer: e.target.value }))} placeholder="Thank you for shopping with us!" />
                 </div>
                 <div className={`${styles.formField} ${styles.fullWidth}`}>
+                  <label>Custom Product Categories</label>
+                  <input value={settings.custom_categories} onChange={e => setSettings(s => ({ ...s, custom_categories: e.target.value }))} placeholder="E.g. Beverages, Food, Electronics (comma separated)" />
+                  <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>These will appear in the category dropdown when adding inventory items.</p>
+                </div>
+                <div className={`${styles.formField} ${styles.fullWidth}`}>
                   <label>Daily Report Phone Number (WhatsApp/SMS)</label>
                   <input value={settings.owner_whatsapp} onChange={e => setSettings(s => ({ ...s, owner_whatsapp: e.target.value }))} placeholder="e.g. 233240000000" />
                   <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>Owner will receive professional sales summaries daily on this number.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Taxes and Levies card */}
+            <div className={styles.card}>
+              <div className={styles.cardHeader}>
+                <div className={styles.cardIcon}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div>
+                  <h3 className={styles.cardTitle}>Taxes & Levies</h3>
+                  <p className={styles.cardDesc}>Customize the names and percentages of applied taxes. Set rate to 0 to disable.</p>
+                </div>
+              </div>
+              <div className={styles.formGrid}>
+                {taxConfig.map((tax, idx) => (
+                  <div key={tax.id} style={{ display: 'flex', gap: '16px', gridColumn: '1 / -1' }}>
+                    <div className={styles.formField} style={{ flex: 2 }}>
+                      <label>Tax Slot {idx + 1} Name</label>
+                      <input 
+                        value={tax.name} 
+                        onChange={e => {
+                          const updated = [...taxConfig];
+                          updated[idx].name = e.target.value;
+                          setTaxConfig(updated);
+                        }} 
+                        placeholder="e.g. VAT" 
+                      />
+                    </div>
+                    <div className={styles.formField} style={{ flex: 1 }}>
+                      <label>Rate (%)</label>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        step="0.1" 
+                        value={tax.rate} 
+                        onChange={e => {
+                          const updated = [...taxConfig];
+                          updated[idx].rate = parseFloat(e.target.value) || 0;
+                          setTaxConfig(updated);
+                        }} 
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Receipt Design card */}
+            <div className={styles.card}>
+              <div className={styles.cardHeader}>
+                <div className={styles.cardIcon}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v.5M12 6v.5"/></svg>
+                </div>
+                <div>
+                  <h3 className={styles.cardTitle}>Receipt Design</h3>
+                  <p className={styles.cardDesc}>Choose which sections appear on printed and digital receipts.</p>
+                </div>
+              </div>
+              <div style={{ padding: '0 0 4px' }}>
+                <div className={styles.formGrid} style={{ gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className={styles.formField}>
+                    <label>Currency Symbol</label>
+                    <input value={receiptConfig.currency} onChange={e => setReceiptConfig(rc => ({ ...rc, currency: e.target.value }))} placeholder="GHS" />
+                  </div>
+                  <div className={styles.formField}>
+                    <label>Paper Size</label>
+                    <select value={receiptConfig.paperSize || '80mm'} onChange={e => setReceiptConfig(rc => ({ ...rc, paperSize: e.target.value }))}>
+                      <option value="80mm">80mm (Standard)</option>
+                      <option value="58mm">58mm (Small)</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                  {([
+                    { key: 'showLogo', label: 'Business Logo' },
+                    { key: 'showAddress', label: 'Business Address' },
+                    { key: 'showPhone', label: 'Business Phone' },
+                    { key: 'showTIN', label: 'TIN Number' },
+                    { key: 'showCashier', label: 'Cashier Name' },
+                    { key: 'showCustomer', label: 'Customer Name' },
+                    { key: 'showTaxBreakdown', label: 'Tax Breakdown' },
+                    { key: 'showOrderType', label: 'Order Type' },
+                    { key: 'showOrderNote', label: 'Order Notes' },
+                    { key: 'showBarcode', label: 'Transaction Barcode' },
+                    { key: 'showPoweredBy', label: '"Powered by SikaPOS"' },
+                  ] as Array<{ key: keyof typeof receiptConfig; label: string }>).map(opt => (
+                    <label key={opt.key} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      color: 'var(--color-text-secondary)',
+                      transition: 'all 0.15s',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={!!receiptConfig[opt.key]}
+                        onChange={e => setReceiptConfig(rc => ({ ...rc, [opt.key]: e.target.checked }))}
+                        style={{ accentColor: 'var(--color-gold)', width: '16px', height: '16px' }}
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>
@@ -489,6 +638,10 @@ export default function SettingsScreen() {
                 <button className={styles.outlineBtn} onClick={() => window.sikapos?.printer?.testPrint()}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                   Print Test Page
+                </button>
+                <button className={styles.outlineBtn} onClick={() => window.sikapos?.printer?.openDrawer()}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 11v2"/><path d="M3 8V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/></svg>
+                  Open Cash Drawer
                 </button>
               </div>
             </div>
@@ -660,13 +813,8 @@ export default function SettingsScreen() {
               <div className={styles.infoGrid}>
                 {[
                   ['Developer', 'DanniTech Solution'],
-                  ['Platform', navigator.platform],
-                  ['Database', 'SQLite (Local)'],
-                  ['Tax System', 'Ghana Revenue Authority (GRA) 2024'],
-                  ['VAT Rate', '12.5%'],
-                  ['NHIL', '2.5%'],
-                  ['GETFund', '2.5%'],
-                  ['COVID Levy', '1%'],
+                  ['Tech Support', '0548470413 / 0599008533'],
+                  ['Email', 'dannitechsolution@gmail.com'],
                 ].map(([label, value]) => (
                   <div key={label} className={styles.infoRow}>
                     <span className={styles.infoLabel}>{label}</span>
