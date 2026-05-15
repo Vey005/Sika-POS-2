@@ -1,0 +1,312 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  width: 480px;
+  max-width: 100%;
+  max-height: 95vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--color-surface);
+}
+
+.receiptPreview {
+  background: #fff;
+  color: #000;
+  padding: 24px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  width: 100%;
+}
+
+/* ── Receipt Styles Matching ReceiptModal ── */
+
+.receiptHeader {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.logo {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  margin: 0 auto 8px;
+  display: block;
+}
+
+.receiptBusinessName {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.receiptMeta {
+  font-size: 11px;
+  color: #666;
+  margin: 2px 0;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.divider {
+  border-bottom: 1px dashed #ccc;
+  margin: 15px 0;
+}
+
+.dividerBold {
+  border-bottom: 2px solid #333;
+  margin: 15px 0;
+}
+
+.metaGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.metaRow span:first-child {
+  color: #666;
+}
+
+/* ── Items Table ── */
+
+.itemsHeader {
+  display: grid;
+  grid-template-columns: 1fr 30px 60px 70px;
+  gap: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #666;
+  font-weight: 600;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 8px;
+}
+
+.itemsHeader span:nth-child(2),
+.itemsHeader span:nth-child(3),
+.itemsHeader span:nth-child(4) {
+  text-align: right;
+}
+
+.itemsList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemRow {
+  display: grid;
+  grid-template-columns: 1fr 30px 60px 70px;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.itemName {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.itemSize {
+  color: #996600;
+  margin-left: 4px;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.itemQty, .itemPrice, .itemTotal {
+  font-size: 12px;
+  font-family: 'Courier New', Courier, monospace;
+  text-align: right;
+}
+
+.itemTotal {
+  font-weight: 600;
+}
+
+/* ── Totals ── */
+
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.discountValue {
+  color: #228b22;
+}
+
+.grandTotal {
+  font-size: 16px;
+  font-weight: 800;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #333;
+}
+
+.paymentInfo {
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+
+.footerInfo {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.footerMessage {
+  font-size: 12px;
+  font-style: italic;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.poweredBy {
+  font-size: 9px;
+  color: #999;
+}
+
+.barcodeContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 20px;
+  padding: 14px 18px 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  gap: 6px;
+}
+
+.barcodeCanvas {
+  border-radius: 3px;
+}
+
+.barcodeLabel {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #555;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+/* ── Modal Footer Actions ── */
+
+.footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: 12px;
+}
+
+.printBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--color-gold);
+  color: #000;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.printBtn:hover:not(:disabled) {
+  background: var(--color-gold-light);
+  transform: translateY(-1px);
+}
+
+.printBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.pdfBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--color-text-muted);
+}

@@ -1,0 +1,109 @@
+.panel {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.value {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.valueGold {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--color-gold);
+}
+
+.statusMsg {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: var(--space-2) 0;
+}
+
+.statusMsg[data-status='downloaded'] {
+  color: var(--color-success);
+}
+
+.statusMsg[data-status='error'] {
+  color: var(--color-danger);
+}
+
+.notes {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.btn,
+.btnPrimary {
+  height: 36px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn {
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.btnPrimary {
+  background: var(--color-gold);
+  border: none;
+  color: #0c0c0f;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--color-gold-light);
+}
+
+.btn:disabled,
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+  line-height: 1.5;
+}

@@ -1,0 +1,9 @@
+# Keep `railway up` uploads small (portal is built in Dockerfile on Railway).
+portal/dist
+node_modules
+.env
+*.log
+
+# Host desktop installers elsewhere (GitHub Releases, R2, etc.) — see docs in update-config.
+updates/*.exe
+updates/*.blockmap

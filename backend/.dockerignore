@@ -1,0 +1,6 @@
+node_modules
+.env
+*.log
+portal/dist
+updates/*.exe
+updates/*.blockmap

@@ -1,0 +1,80 @@
+{
+  "name": "sikapos-electron",
+  "version": "1.0.0",
+  "description": "SikaPOS — Premium Point of Sale for Ghanaian Shops",
+  "main": "dist-electron/electron/main.js",
+  "author": "DanniTech Solution",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on tcp:5173 && tsc -p tsconfig.electron.json && electron . --disable-gpu --disable-software-rasterizer --no-sandbox",
+    "build": "vite build && tsc -p tsconfig.electron.json",
+    "preview": "electron . --disable-gpu --disable-software-rasterizer --no-sandbox",
+    "dist": "npm run build && electron-builder",
+    "dist:publish": "npm run build && electron-builder --publish never",
+    "release:github": "npm run build && electron-builder --win --publish always",
+    "release:patch": "npm version patch && npm run dist:publish",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3 usb node-hid"
+  },
+  "build": {
+    "appId": "com.sikapos.app",
+    "productName": "SikaPOS",
+    "directories": {
+      "output": "release"
+    },
+    "npmRebuild": true,
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Vey005",
+      "repo": "Sika-POS",
+      "releaseType": "release"
+    }
+  },
+  "dependencies": {
+    "axios": "^1.15.0",
+    "better-sqlite3": "^9.4.3",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.3",
+    "node-hid": "^3.3.0",
+    "usb": "^2.17.0",
+    "xlsx": "^0.18.5",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.12.5",
+    "@types/node-hid": "^1.3.4",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "@types/usb": "^2.0.4",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.23.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.10",
+    "wait-on": "^7.2.0"
+  }
+}
