@@ -9,11 +9,7 @@ interface Props {
 export default function CustomerModal({ onClose }: Props) {
   const [query, setQuery] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
-<<<<<<< HEAD
   const setCustomer = useCartStore(state => state.setCustomer);
-=======
-  const { setCustomer, customerName: currentName } = useCartStore();
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     if (query.length > 1) {
@@ -30,7 +26,6 @@ export default function CustomerModal({ onClose }: Props) {
   };
 
   const handleSelect = (c: any) => {
-<<<<<<< HEAD
     setCustomer(c.id, c.name, Number(c.credit_balance) || 0);
     onClose();
   };
@@ -43,17 +38,6 @@ export default function CustomerModal({ onClose }: Props) {
       setCustomer(res.id, name, 0);
       onClose();
     }
-=======
-    setCustomer(c.id, c.name, c.credit_limit - (c.current_credit || 0)); // Note: existing logic used creditBalance differently but this matches store setCustomer signature roughly
-    onClose();
-  };
-
-  const handleManualEntry = () => {
-    if (!query.trim()) return;
-    // Set customer with 0 ID to indicate manual name
-    setCustomer(0, query, 0);
-    onClose();
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   };
 
   return (

@@ -2,12 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useCartStore } from '../../store/cart';
 import { useAuthStore } from '../../store/auth';
 import Barcode from '../common/Barcode';
-<<<<<<< HEAD
 import { isTypingInEditableField } from '../../utils/keyboard';
 import { getReceiptPaymentDisplay } from '../../utils/receiptPayment';
 import { showAlert } from '../../store/dialogStore';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './ReceiptModal.module.css';
 
 interface Props {
@@ -22,7 +19,6 @@ export default function ReceiptModal({ result, onClose }: Props) {
   const [bizDetails, setBizDetails] = useState({ address: '', phone: '', tin: '' });
 
   const rc = receiptConfig;
-<<<<<<< HEAD
   const cur = rc.currency || 'GH₵';
   const paymentDisplay = getReceiptPaymentDisplay({
     paymentMethod: result.paymentMethod,
@@ -34,9 +30,6 @@ export default function ReceiptModal({ result, onClose }: Props) {
     customerCreditBalanceAfter: result.customerCreditBalanceAfter,
     currency: cur,
   });
-=======
-  const cur = rc.currency || 'GHS';
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     // Load business address/phone/tin for receipt
@@ -51,7 +44,6 @@ export default function ReceiptModal({ result, onClose }: Props) {
     }
   }, []);
 
-<<<<<<< HEAD
   // Keyboard shortcuts when focus is not in a text field (avoid eating "n", Enter, etc. while typing)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -61,13 +53,6 @@ export default function ReceiptModal({ result, onClose }: Props) {
         e.preventDefault();
         handlePrint();
       }
-=======
-  // Auto-focus for keyboard nav
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === 'n') onClose();
-      if (e.key === 'p' || (e.ctrlKey && e.key === 'p')) { e.preventDefault(); handlePrint(); }
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -95,10 +80,7 @@ export default function ReceiptModal({ result, onClose }: Props) {
         tin: bizDetails.tin,
         cashier: user?.name || 'Cashier',
         date: dateStr,
-<<<<<<< HEAD
         time: timeStr,
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         receiptNumber: result.receiptNumber,
         items: items.map(i => ({
           name: i.product_name,
@@ -116,18 +98,12 @@ export default function ReceiptModal({ result, onClose }: Props) {
         })).filter(t => t.amount > 0),
         discount: effectiveDiscount,
         total: result.grandTotal,
-<<<<<<< HEAD
         paymentMethod: result.paymentMethod,
         status: result.status ?? (result.paymentMethod === 'credit' ? 'debt' : 'completed'),
         paidAmount: result.paidAmount ?? 0,
         amountTendered: result.amountTendered,
         change: result.changeGiven,
         customerCreditBalanceAfter: result.customerCreditBalanceAfter,
-=======
-        paymentMethod: result.changeGiven >= 0 ? 'cash' : 'momo',
-        amountTendered: result.grandTotal + result.changeGiven,
-        change: result.changeGiven,
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         customerName: result.customerName || customerName,
         orderType: orderType,
         orderNote: orderNote,
@@ -143,11 +119,7 @@ export default function ReceiptModal({ result, onClose }: Props) {
       }
     } catch (err) {
       console.error('Failed to print receipt:', err);
-<<<<<<< HEAD
       await showAlert('Failed to print receipt. Check printer connection. You can also save as PDF.');
-=======
-      alert('Failed to print receipt. Check printer connection. You can also save as PDF.');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
@@ -161,10 +133,7 @@ export default function ReceiptModal({ result, onClose }: Props) {
         tin: bizDetails.tin,
         cashier: user?.name || 'Cashier',
         date: dateStr,
-<<<<<<< HEAD
         time: timeStr,
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         receiptNumber: result.receiptNumber,
         items: items.map(i => ({
           name: i.product_name,
@@ -182,18 +151,12 @@ export default function ReceiptModal({ result, onClose }: Props) {
         })).filter(t => t.amount > 0),
         discount: effectiveDiscount,
         total: result.grandTotal,
-<<<<<<< HEAD
         paymentMethod: result.paymentMethod,
         status: result.status ?? (result.paymentMethod === 'credit' ? 'debt' : 'completed'),
         paidAmount: result.paidAmount ?? 0,
         amountTendered: result.amountTendered,
         change: result.changeGiven,
         customerCreditBalanceAfter: result.customerCreditBalanceAfter,
-=======
-        paymentMethod: result.changeGiven >= 0 ? 'cash' : 'momo',
-        amountTendered: result.grandTotal + result.changeGiven,
-        change: result.changeGiven,
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         customerName: result.customerName || customerName,
         orderType: orderType,
         orderNote: orderNote,
@@ -206,11 +169,7 @@ export default function ReceiptModal({ result, onClose }: Props) {
         await window.sikapos.printer.saveAsPDF(receiptData, 'receipt');
       }
     } catch (err: any) {
-<<<<<<< HEAD
       await showAlert('Failed to save PDF: ' + err.message);
-=======
-      alert('Failed to save PDF: ' + err.message);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
@@ -362,7 +321,6 @@ export default function ReceiptModal({ result, onClose }: Props) {
               <span>TOTAL</span>
               <span>{cur} {(result.grandTotal || 0).toFixed(2)}</span>
             </div>
-<<<<<<< HEAD
             {paymentDisplay.statusBanner && (
               <div className={`${styles.totalRow} ${styles.changeRow}`}>
                 <span>Status</span>
@@ -378,14 +336,6 @@ export default function ReceiptModal({ result, onClose }: Props) {
                 <span>{line.value}</span>
               </div>
             ))}
-=======
-            {(result.changeGiven || 0) > 0 && (
-              <div className={`${styles.totalRow} ${styles.changeRow}`}>
-                <span>Change Given</span>
-                <span>{cur} {(result.changeGiven || 0).toFixed(2)}</span>
-              </div>
-            )}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           </div>
 
           <div className={styles.divider} />

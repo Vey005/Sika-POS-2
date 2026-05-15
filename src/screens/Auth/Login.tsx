@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
@@ -9,30 +8,14 @@ import styles from './Login.module.css';
 export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-=======
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../../store/auth';
-import styles from './Login.module.css';
-
-const PIN_LENGTH = 4;
-
-export default function LoginScreen() {
-  const [pin, setPin] = useState('');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const [businessName, setBusinessName] = useState('My Shop');
   const [shake, setShake] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-<<<<<<< HEAD
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const passwordRef = useRef<HTMLInputElement>(null);
-=======
-  const navigate = useNavigate();
-  const { login } = useAuthStore();
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   const [loginUser, setLoginUser] = useState<any | null>(null);
 
@@ -41,14 +24,9 @@ export default function LoginScreen() {
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
   const [licenseKeyInput, setLicenseKeyInput] = useState('');
-<<<<<<< HEAD
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [recovering, setRecovering] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
-=======
-  const [newPinInput, setNewPinInput] = useState('');
-  const [recovering, setRecovering] = useState(false);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     // Load business info
@@ -56,7 +34,6 @@ export default function LoginScreen() {
       window.sikapos.settings.getBusiness().then(biz => {
         if (biz.business_name) setBusinessName(biz.business_name);
       });
-<<<<<<< HEAD
       (async () => {
         const data = await window.sikapos.users.getAll();
         setUsers(data);
@@ -142,86 +119,14 @@ export default function LoginScreen() {
     }
   };
 
-=======
-      window.sikapos.users.getAll().then(data => {
-        setUsers(data);
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only capture if a user is selected and we are ready for PIN input
-      if (!loginUser || isRecovering || pin.length >= PIN_LENGTH || shake) return;
-      
-      if (/^[0-9]$/.test(e.key)) {
-        handleDigit(e.key);
-      } else if (e.key === 'Backspace') {
-        handleBackspace();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [loginUser, isRecovering, pin, shake]);
-
-  const handleDigit = async (digit: string) => {
-    if (pin.length >= PIN_LENGTH) return;
-    const newPin = pin + digit;
-    setPin(newPin);
-    setError('');
-    setSuccessMsg('');
-
-    if (newPin.length === PIN_LENGTH) {
-      // Small delay for UI feel
-      await new Promise(r => setTimeout(r, 100));
-      
-      try {
-        const result = await window.sikapos.users.loginById(loginUser.id, newPin);
-        if (result && 'locked' in result) {
-          setShake(true);
-          setError(`Too many attempts. Try again in ${result.secondsLeft}s`);
-          setTimeout(() => {
-            setPin('');
-            setShake(false);
-          }, 600);
-        } else if (result && 'id' in result) {
-          login(result);
-          navigate('/pos');
-        } else {
-          setShake(true);
-          setError('Incorrect PIN');
-          setTimeout(() => {
-            setPin('');
-            setShake(false);
-          }, 600);
-        }
-      } catch (err) {
-        setError('Login failed');
-        setPin('');
-      }
-    }
-  };
-
-  const handleBackspace = () => {
-    setPin(p => p.slice(0, -1));
-    setError('');
-  };
-
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const handleRecoverySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserId) {
       setError('Please select a user.');
       return;
     }
-<<<<<<< HEAD
     if (newPasswordInput.length < 4) {
       setError('New password must be at least 4 characters.');
-=======
-    if (newPinInput.length !== 4 || !/^\d{4}$/.test(newPinInput)) {
-      setError('New PIN must be exactly 4 digits.');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       return;
     }
     if (!licenseKeyInput.trim()) {
@@ -232,23 +137,15 @@ export default function LoginScreen() {
     setRecovering(true);
     setError('');
     try {
-<<<<<<< HEAD
       const result = await window.sikapos.users.resetPassword({
         userId: Number(selectedUserId),
         licenseKey: licenseKeyInput,
         newPassword: newPasswordInput
-=======
-      const result = await window.sikapos.users.resetPin({
-        userId: Number(selectedUserId),
-        licenseKey: licenseKeyInput,
-        newPin: newPinInput
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       });
 
       if (result.success) {
         setIsRecovering(false);
         setLicenseKeyInput('');
-<<<<<<< HEAD
         setNewPasswordInput('');
         setSelectedUserId('');
         setPassword('');
@@ -258,27 +155,11 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       setError(formatErrorMsg(err, 'An error occurred.'));
-=======
-        setNewPinInput('');
-        setSelectedUserId('');
-        setPin('');
-        setSuccessMsg('PIN reset successfully. Please log in.');
-      } else {
-        setError(result.message || 'Failed to reset PIN.');
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred.');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setRecovering(false);
     }
   };
 
-<<<<<<< HEAD
-=======
-  const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
-
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   return (
     <div className={styles.container}>
       {/* Background pattern */}
@@ -310,7 +191,6 @@ export default function LoginScreen() {
         {successMsg && <p style={{ color: 'var(--color-success)', fontSize: '13px', textAlign: 'center' }}>{successMsg}</p>}
 
         {isRecovering ? (
-<<<<<<< HEAD
           <form
             className={styles.recoveryForm}
             onSubmit={handleRecoverySubmit}
@@ -320,9 +200,6 @@ export default function LoginScreen() {
               }
             }}
           >
-=======
-          <form className={styles.recoveryForm} onSubmit={handleRecoverySubmit}>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             <div className={styles.inputGroup}>
               <label>Select User</label>
               <select 
@@ -351,7 +228,6 @@ export default function LoginScreen() {
             </div>
 
             <div className={styles.inputGroup}>
-<<<<<<< HEAD
               <label>New Password</label>
               <input 
                 type="password" 
@@ -359,16 +235,6 @@ export default function LoginScreen() {
                 placeholder="Enter new password (min 4 characters)"
                 value={newPasswordInput}
                 onChange={e => setNewPasswordInput(e.target.value)}
-=======
-              <label>New 4-Digit PIN</label>
-              <input 
-                type="password" 
-                className={styles.inputField} 
-                placeholder="••••"
-                maxLength={4}
-                value={newPinInput}
-                onChange={e => setNewPinInput(e.target.value.replace(/\D/g, ''))}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 required
               />
             </div>
@@ -383,16 +249,11 @@ export default function LoginScreen() {
                 Cancel
               </button>
               <button type="submit" className={styles.submitBtn} disabled={recovering}>
-<<<<<<< HEAD
                 {recovering ? 'Resetting...' : 'Reset Password'}
-=======
-                {recovering ? 'Resetting...' : 'Reset PIN'}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </button>
             </div>
           </form>
         ) : !loginUser ? (
-<<<<<<< HEAD
           loadingUsers ? (
             <div style={{ textAlign: 'center', padding: '18px 0', color: 'var(--color-text-muted)', fontSize: '13px' }}>
               Restoring your staff accounts...
@@ -434,34 +295,6 @@ export default function LoginScreen() {
               onClick={() => {
                 setLoginUser(null);
                 setPassword('');
-=======
-          <div className={styles.userGrid}>
-            {users.map(u => (
-              <div 
-                key={u.id} 
-                className={styles.userCard}
-                onClick={() => {
-                  setLoginUser(u);
-                  setError('');
-                  setPin('');
-                }}
-              >
-                <div className={styles.userAvatar}>
-                  {u.name.charAt(0).toUpperCase()}
-                </div>
-                <div className={styles.userName} title={u.name}>{u.name}</div>
-                <div className={styles.userRole}>{u.role}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <>
-            <button 
-              className={styles.backToUsers}
-              onClick={() => {
-                setLoginUser(null);
-                setPin('');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 setError('');
               }}
             >
@@ -471,7 +304,6 @@ export default function LoginScreen() {
               </svg>
               Not {loginUser.name}?
             </button>
-<<<<<<< HEAD
 
             <p className={styles.hint} style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>
               Welcome back, <strong>{loginUser.name}</strong>
@@ -542,61 +374,6 @@ export default function LoginScreen() {
               Forgot Password?
             </button>
           </form>
-=======
-            <p className={styles.hint} style={{ marginBottom: '10px', fontSize: '14px', color: 'var(--color-text-primary)' }}>
-              Welcome back, <strong>{loginUser.name}</strong>
-            </p>
-
-            {/* PIN dots */}
-            <div className={styles.pinDots}>
-              {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`${styles.dot} ${i < pin.length ? styles.dotFilled : ''} ${error ? styles.dotError : ''}`}
-                />
-              ))}
-            </div>
-
-            {/* Numpad */}
-            <div className={styles.numpad}>
-              {digits.map((d, i) => (
-                d === '' ? (
-                  <div key={i} className={styles.numEmpty} />
-                ) : d === '⌫' ? (
-                  <button
-                    key={i}
-                    className={`${styles.numBtn} ${styles.backspaceBtn}`}
-                    onClick={handleBackspace}
-                    disabled={pin.length === 0}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
-                      <line x1="18" y1="9" x2="12" y2="15"/>
-                      <line x1="12" y1="9" x2="18" y2="15"/>
-                    </svg>
-                  </button>
-                ) : (
-                  <button
-                    key={i}
-                    className={styles.numBtn}
-                    onClick={() => handleDigit(d)}
-                  >
-                    {d}
-                  </button>
-                )
-              ))}
-            </div>
-
-            <p className={styles.hint}>Enter your 4-digit PIN</p>
-
-            <button 
-              className={styles.forgotPinBtn}
-              onClick={() => { setIsRecovering(true); setError(''); setSuccessMsg(''); }}
-            >
-              Forgot PIN?
-            </button>
-          </>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         )}
       </div>
 

@@ -7,18 +7,12 @@ interface Window {
       minimize: () => void;
       maximize: () => void;
       close: () => void;
-<<<<<<< HEAD
       confirmClose: () => void;
     };
     /** After handling close (e.g. attendance), call window.confirmClose() to exit the app. */
     onCloseIntercepted: (callback: () => void) => () => void;
     inventory: {
       getAll: (filters?: { search?: string, category?: string, limit?: number, lowStock?: boolean, expiring?: boolean }) => Promise<Product[]>;
-=======
-    };
-    inventory: {
-      getAll: (filters?: { search?: string, category?: string, limit?: number, lowStock?: boolean }) => Promise<Product[]>;
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       search: (query: string) => Promise<Product[]>;
       getByBarcode: (barcode: string) => Promise<Product | null>;
       getById: (id: number) => Promise<Product | null>;
@@ -28,10 +22,7 @@ interface Window {
       getCategories: () => Promise<string[]>;
       getSummary: () => Promise<{ total_items: number; total_stock: number; total_value_selling: number; total_value_cost: number }>;
       getLowStockCount: () => Promise<number>;
-<<<<<<< HEAD
       getExpiringCount: () => Promise<number>;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       getCategorySummary: () => Promise<Array<{ category: string; item_count: number; total_stock: number; total_value: number }>>;
       importFromExcel: () => Promise<{ success: boolean; count?: number; message?: string }>;
       downloadTemplate: () => Promise<{ success: boolean; filePath?: string }>;
@@ -56,10 +47,7 @@ interface Window {
       search: (query: string) => Promise<Customer[]>;
       getById: (id: number) => Promise<CustomerWithHistory>;
       save: (customer: Partial<Customer>) => Promise<{ id?: number; success: boolean; message?: string }>;
-<<<<<<< HEAD
       delete: (id: number) => Promise<{ success: boolean; message?: string }>;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       addCreditPayment: (customerId: number, amount: number, note: string, method?: string) => Promise<{ success: boolean; customer?: Customer; message?: string }>;
     };
     settings: {
@@ -74,15 +62,12 @@ interface Window {
       printReceipt: (receipt: any) => Promise<void>;
       printKitchenReceipt: (order: any) => Promise<void>;
       printReport: (report: any) => Promise<void>;
-<<<<<<< HEAD
       printLowStock: (payload: {
         businessName: string;
         printedAt?: string;
         items: Array<{ name: string; barcode?: string; stock_qty: number; low_stock_threshold: number }>;
         config?: { paperSize?: string; currency?: string; [key: string]: unknown };
       }) => Promise<{ success: boolean }>;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       testPrint: () => Promise<void>;
       openDrawer: () => Promise<void>;
       saveAsPDF: (data: any, type: 'receipt' | 'report') => Promise<{ success: boolean; filePath?: string }>;
@@ -93,10 +78,10 @@ interface Window {
     sync: {
       forceSync: () => Promise<{ success: boolean }>;
       restore: () => Promise<{ success: boolean; count?: number; message?: string }>;
+      queueItem: (item: { entity: string; operation: string; payload: unknown; priority?: number }) => Promise<{ success: boolean }>;
       onStatusChange: (callback: (status: 'synced' | 'syncing' | 'error') => void) => () => void;
     };
     users: {
-<<<<<<< HEAD
       getAll: () => Promise<Array<{ id: number; name: string; role: string; created_at: string; updated_at: string; cashier_nav_visibility?: string | null }>>;
       getById: (id: number) => Promise<{ id: number; name: string; role: string; cashier_nav_visibility?: string | null } | null>;
       save: (user: {
@@ -111,13 +96,6 @@ interface Window {
       login: (password: string) => Promise<{ id: number; name: string; role: string } | { locked: true; secondsLeft: number } | null>;
       loginById: (userId: number, password: string) => Promise<{ id: number; name: string; role: string } | { locked: true; secondsLeft: number } | null>;
       resetPassword: (data: { userId: number; licenseKey: string; newPassword: string; newPin?: string }) => Promise<{ success: boolean; message?: string }>;
-=======
-      getAll: () => Promise<Array<{ id: number; name: string; role: string; created_at: string; updated_at: string }>>;
-      save: (user: { id?: number; name: string; pin: string; role: string }) => Promise<{ success: boolean; id?: number; message?: string }>;
-      delete: (id: number) => Promise<{ success: boolean; message?: string }>;
-      login: (pin: string) => Promise<{ id: number; name: string; role: string } | { locked: true; secondsLeft: number } | null>;
-      loginById: (userId: number, pin: string) => Promise<{ id: number; name: string; role: string } | { locked: true; secondsLeft: number } | null>;
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       resetPin: (data: { userId: number; licenseKey: string; newPin: string }) => Promise<{ success: boolean; message?: string }>;
     };
     secureStore: {
@@ -137,7 +115,6 @@ interface Window {
       getStatus: (userId: number) => Promise<{ id: number; user_id: number; type: 'in' | 'out'; created_at: string } | null>;
       getHistory: (userId?: number, range?: { from?: string; to?: string }) => Promise<any[]>;
     };
-<<<<<<< HEAD
     updates: {
       getState: () => Promise<{
         status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
@@ -179,8 +156,6 @@ interface Window {
       onAvailable: (callback: (payload: { version: string }) => void) => () => void;
       onDownloaded: (callback: (payload: { version: string }) => void) => () => void;
     };
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   };
 }
 
@@ -198,7 +173,6 @@ interface Product {
   is_pharmacy: number;
   is_inventory: number;
   expiry_date?: string;
-<<<<<<< HEAD
   /** Months before expiry_date to flag this SKU (null = shop default). */
   expiry_alert_months?: number | null;
   batch_number?: string;
@@ -208,11 +182,6 @@ interface Product {
   pack_price?: number | null;
   pack_label?: string;
   stock_unit?: 'single' | 'pack';
-=======
-  batch_number?: string;
-  nafdac_number?: string;
-  unit: string;
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   size?: string;
   image_path?: string;
   created_at: string;
@@ -220,22 +189,16 @@ interface Product {
 }
 
 interface CartItem {
-<<<<<<< HEAD
   cart_key: string;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   product_id: number;
   product_name: string;
   product_barcode?: string;
   product_size?: string;
   category: string;
   quantity: number;
-<<<<<<< HEAD
   sale_unit?: 'single' | 'pack';
   stock_unit?: 'single' | 'pack';
   unit_multiplier?: number;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   unit_price: number;
   cost_price: number;
   stock_qty: number;
@@ -272,7 +235,6 @@ interface TransactionResult {
   receiptNumber: string;
   grandTotal: number;
   changeGiven: number;
-<<<<<<< HEAD
   paymentMethod: string;
   amountTendered: number;
   status: string;
@@ -281,10 +243,6 @@ interface TransactionResult {
   customerName?: string;
   /** Present after a credit sale: customer account balance including this sale. */
   customerCreditBalanceAfter?: number;
-=======
-  tax: TaxBreakdown;
-  customerName?: string;
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 }
 
 interface TransactionFilters {
@@ -379,12 +337,9 @@ interface BusinessSettings {
   notification_provider?: 'whatsapp' | 'sms';
   sms_api_key?: string;
   sms_sender_id?: string;
-<<<<<<< HEAD
   custom_categories?: string;
   tax_config?: string;
   receipt_config?: string;
   cashier_nav_visibility?: string;
   expiry_alert_months_default?: string;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 }

@@ -20,28 +20,17 @@
 }
 
 .card {
-<<<<<<< HEAD
   position: relative;
   z-index: 2;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-xl);
   padding: var(--space-10) var(--space-8);
-<<<<<<< HEAD
   width: 400px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-5);
-=======
-  width: 380px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-6);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   animation: slideUp 0.5s var(--spring) both;
   box-shadow: var(--shadow-lg), 0 0 60px rgba(212,160,23,0.05);
 }
@@ -55,7 +44,6 @@
   animation: shake 0.5s ease;
 }
 
-<<<<<<< HEAD
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-12px); }
@@ -64,8 +52,6 @@
   80% { transform: translateX(6px); }
 }
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .logoArea {
   display: flex;
   flex-direction: column;
@@ -86,14 +72,11 @@
   animation: glow 3s ease infinite;
 }
 
-<<<<<<< HEAD
 @keyframes glow {
   0%, 100% { box-shadow: 0 0 12px rgba(212,160,23,0.2); }
   50% { box-shadow: 0 0 24px rgba(212,160,23,0.4); }
 }
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .logoSymbol {
   font-family: var(--font-mono);
   font-size: 28px;
@@ -115,7 +98,6 @@
   font-family: var(--font-body);
 }
 
-<<<<<<< HEAD
 /* ── Password Input ── */
 .passwordWrapper {
   width: 100%;
@@ -221,100 +203,16 @@
 }
 
 /* ── Error / Hint ── */
-=======
-.pinDots {
-  display: flex;
-  gap: var(--space-4);
-  height: 20px;
-  align-items: center;
-}
-
-.dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--color-border-strong);
-  background: transparent;
-  transition: all var(--transition-normal) var(--spring);
-}
-
-.dotFilled {
-  background: var(--color-gold);
-  border-color: var(--color-gold);
-  box-shadow: 0 0 8px rgba(212,160,23,0.5);
-  transform: scale(1.2);
-}
-
-.dotError {
-  border-color: var(--color-danger);
-  background: var(--color-danger);
-}
-
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .errorText {
   color: var(--color-danger);
   font-size: 12px;
   text-align: center;
   animation: fadeIn 0.2s ease;
-<<<<<<< HEAD
 }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
-=======
-  margin-top: -var(--space-3);
-}
-
-.numpad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
-  width: 100%;
-}
-
-.numBtn {
-  height: 60px;
-  border: 1px solid var(--color-border);
-  background: var(--color-elevated);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  font-family: var(--font-display);
-  font-size: 30px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.numBtn:hover {
-  background: var(--color-overlay);
-  border-color: var(--color-border-strong);
-  transform: translateY(-1px);
-}
-
-.numBtn:active {
-  transform: scale(0.94);
-  background: var(--color-gold-dim);
-  border-color: var(--color-gold);
-  color: var(--color-gold);
-}
-
-.numEmpty {
-  height: 60px;
-}
-
-.backspaceBtn {
-  color: var(--color-text-muted);
-}
-
-.backspaceBtn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-  transform: none;
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 }
 
 .hint {
@@ -323,10 +221,7 @@
   text-align: center;
 }
 
-<<<<<<< HEAD
 /* ── Version ── */
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .version {
   position: absolute;
   bottom: var(--space-6);
@@ -335,10 +230,7 @@
   letter-spacing: 0.5px;
 }
 
-<<<<<<< HEAD
 /* ── Exit Button ── */
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .exitBtn {
   position: absolute;
   top: var(--space-6);
@@ -365,38 +257,23 @@
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
 }
 
-<<<<<<< HEAD
 /* ── Forgot Password ── */
 .forgotPasswordBtn {
-=======
-.forgotPinBtn {
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   background: none;
   border: none;
   color: var(--color-gold);
   font-size: 13px;
   cursor: pointer;
-<<<<<<< HEAD
-=======
-  margin-top: var(--space-4);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   opacity: 0.8;
   transition: opacity var(--transition-fast);
 }
 
-<<<<<<< HEAD
 .forgotPasswordBtn:hover {
-=======
-.forgotPinBtn:hover {
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   opacity: 1;
   text-decoration: underline;
 }
 
-<<<<<<< HEAD
 /* ── Recovery Form ── */
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .recoveryForm {
   width: 100%;
   display: flex;
@@ -472,10 +349,7 @@
   filter: brightness(1.1);
 }
 
-<<<<<<< HEAD
 /* ── User Grid ── */
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .userGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -544,10 +418,7 @@
   margin-top: 2px;
 }
 
-<<<<<<< HEAD
 /* ── Back to Users ── */
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .backToUsers {
   background: none;
   border: none;

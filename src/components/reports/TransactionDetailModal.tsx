@@ -1,16 +1,10 @@
 import { useState, useEffect } from 'react';
 import { formatCurrency } from '../../utils/format';
-<<<<<<< HEAD
 import { getReceiptPaymentDisplay } from '../../utils/receiptPayment';
 import Barcode from '../common/Barcode';
 import styles from './TransactionDetailModal.module.css';
 import { useAuthStore } from '../../store/auth';
 import { showAlert } from '../../store/dialogStore';
-=======
-import Barcode from '../common/Barcode';
-import styles from './TransactionDetailModal.module.css';
-import { useAuthStore } from '../../store/auth';
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 interface Props {
   transactionId: number;
@@ -25,11 +19,7 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
   const [bizDetails, setBizDetails] = useState({ address: '', phone: '', tin: '' });
 
   const rc = receiptConfig;
-<<<<<<< HEAD
   const cur = rc.currency || 'GH₵';
-=======
-  const cur = rc.currency || 'GHS';
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     async function load() {
@@ -54,7 +44,6 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
     load();
   }, [transactionId]);
 
-<<<<<<< HEAD
   const buildReceiptDataFromTx = (transaction: typeof tx) => {
     const isVoidedOrReversed =
       transaction.status === 'voided' || transaction.status === 'reversed';
@@ -112,62 +101,13 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
     };
   };
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const handlePrint = async () => {
     if (!tx || !window.sikapos) return;
     setIsPrinting(true);
     try {
-<<<<<<< HEAD
       await window.sikapos.printer.printReceipt(buildReceiptDataFromTx(tx));
     } catch (err: any) {
       await showAlert('Failed to print: ' + err.message);
-=======
-      const receiptData = {
-        businessName,
-        businessLogo,
-        businessAddress: bizDetails.address,
-        businessPhone: bizDetails.phone,
-        tin: bizDetails.tin,
-        cashier: tx.cashier_name,
-        date: new Date(tx.created_at).toLocaleDateString('en-GH', {
-          year: 'numeric', month: 'long', day: 'numeric',
-        }),
-        time: new Date(tx.created_at).toLocaleTimeString('en-GH', {
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-        }),
-        receiptNumber: tx.receipt_number,
-        items: tx.items.map((i: any) => ({
-          name: i.product_name,
-          size: i.product_size,
-          quantity: i.quantity,
-          unitPrice: i.unit_price,
-          subtotal: i.line_total
-        })),
-        subtotal: tx.subtotal,
-        tax: tx.total_tax,
-        taxBreakdown: useAuthStore.getState().taxConfig.map(t => ({
-          name: t.name,
-          rate: t.rate,
-          amount: tx[`tax_${t.id}`] || 0
-        })).filter(t => t.amount > 0),
-        discount: tx.discount_amount || 0,
-        total: tx.grand_total,
-        paymentMethod: tx.payment_method,
-        amountTendered: tx.amount_tendered || tx.grand_total,
-        change: Math.max(0, (tx.amount_tendered || tx.grand_total) - tx.grand_total),
-        customerName: tx.customer_name,
-        orderType: tx.order_type,
-        orderNote: tx.order_note,
-        footerMessage: receiptFooter || 'Reprinted Receipt',
-        currency: cur,
-        config: rc,
-      };
-
-      await window.sikapos.printer.printReceipt(receiptData);
-    } catch (err: any) {
-      alert('Failed to print: ' + err.message);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setIsPrinting(false);
     }
@@ -176,55 +116,9 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
   const handleSavePDF = async () => {
     if (!tx || !window.sikapos) return;
     try {
-<<<<<<< HEAD
       await window.sikapos.printer.saveAsPDF(buildReceiptDataFromTx(tx), 'receipt');
     } catch (err: any) {
       await showAlert('Failed to save PDF: ' + err.message);
-=======
-      const receiptData = {
-        businessName,
-        businessLogo,
-        businessAddress: bizDetails.address,
-        businessPhone: bizDetails.phone,
-        tin: bizDetails.tin,
-        cashier: tx.cashier_name,
-        date: new Date(tx.created_at).toLocaleDateString('en-GH', {
-          year: 'numeric', month: 'long', day: 'numeric',
-        }),
-        time: new Date(tx.created_at).toLocaleTimeString('en-GH', {
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-        }),
-        receiptNumber: tx.receipt_number,
-        items: tx.items.map((i: any) => ({
-          name: i.product_name,
-          size: i.product_size,
-          quantity: i.quantity,
-          unitPrice: i.unit_price,
-          subtotal: i.line_total
-        })),
-        subtotal: tx.subtotal,
-        tax: tx.total_tax,
-        taxBreakdown: useAuthStore.getState().taxConfig.map(t => ({
-          name: t.name,
-          rate: t.rate,
-          amount: tx[`tax_${t.id}`] || 0
-        })).filter(t => t.amount > 0),
-        discount: tx.discount_amount || 0,
-        total: tx.grand_total,
-        paymentMethod: tx.payment_method,
-        amountTendered: tx.amount_tendered || tx.grand_total,
-        change: Math.max(0, (tx.amount_tendered || tx.grand_total) - tx.grand_total),
-        customerName: tx.customer_name,
-        orderType: tx.order_type,
-        orderNote: tx.order_note,
-        footerMessage: receiptFooter || 'Reprinted Receipt',
-        currency: cur,
-        config: rc,
-      };
-      await window.sikapos.printer.saveAsPDF(receiptData, 'receipt');
-    } catch (err: any) {
-      alert('Failed to save PDF: ' + err.message);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
@@ -378,7 +272,6 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
 
             {/* Payment and Footer info */}
             <div className={styles.paymentInfo}>
-<<<<<<< HEAD
               {getReceiptPaymentDisplay({
                 paymentMethod: tx.payment_method,
                 status: tx.status,
@@ -392,16 +285,6 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
                   <span>{line.value}</span>
                 </div>
               ))}
-=======
-              <div className={styles.metaRow}>
-                <span>Method</span>
-                <span>{tx.payment_method.toUpperCase()}</span>
-              </div>
-              <div className={styles.metaRow}>
-                <span>Status</span>
-                <span>{tx.status.toUpperCase()}</span>
-              </div>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </div>
 
             <div className={styles.footerInfo}>

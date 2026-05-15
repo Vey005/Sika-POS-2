@@ -507,7 +507,6 @@ export class SyncManager {
       const { data } = response.data;
       let totalRestored = 0;
 
-<<<<<<< HEAD
       const toObj = (v: any) => {
         if (!v) return null;
         if (typeof v === 'string') {
@@ -573,23 +572,10 @@ export class SyncManager {
               p.created_at || null,
               p.updated_at || null
             );
-=======
-      // Wrap in transaction for atomicity and performance
-      const restoreTransaction = db.transaction(() => {
-        // 1. Restore Products
-        if (data.products && Array.isArray(data.products)) {
-          const insertProd = db.prepare(`
-            INSERT OR REPLACE INTO products (id, name, sku, price, stock, category, is_inventory, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          for (const p of data.products) {
-            insertProd.run(p.id, p.name, p.sku, p.price, p.stock, p.category, p.is_inventory ? 1 : 0, p.created_at);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             totalRestored++;
           }
         }
 
-<<<<<<< HEAD
         // 2) Customers
         if (data.customer && Array.isArray(data.customer)) {
           const customers = flatten(data.customer);
@@ -777,28 +763,6 @@ export class SyncManager {
               p.note || null,
               p.created_at || null
             );
-=======
-        // 2. Restore Sales
-        if (data.sales && Array.isArray(data.sales)) {
-          const insertSale = db.prepare(`
-            INSERT OR REPLACE INTO sales (id, receipt_number, cashier_id, total_amount, discount, grand_total, payment_method, order_type, order_note, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          for (const s of data.sales) {
-            insertSale.run(s.id, s.receipt_number, s.cashier_id, s.total_amount, s.discount, s.grand_total, s.payment_method, s.order_type, s.order_note, s.status, s.created_at);
-            totalRestored++;
-          }
-        }
-
-        // 3. Restore Customers
-        if (data.customers && Array.isArray(data.customers)) {
-          const insertCust = db.prepare(`
-            INSERT OR REPLACE INTO customers (id, name, phone, email, points, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `);
-          for (const c of data.customers) {
-            insertCust.run(c.id, c.name, c.phone, c.email, c.points, c.created_at);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             totalRestored++;
           }
         }

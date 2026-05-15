@@ -2,10 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useCartStore } from '../../store/cart';
 import { useAuthStore } from '../../store/auth';
 import { formatCurrency } from '../../utils/format';
-<<<<<<< HEAD
 import { formatErrorMsg } from '../../utils/errorFormatter';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './PaymentModal.module.css';
 
 interface Props {
@@ -30,10 +27,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
   const [customerInfo, setCustomerInfo] = useState<any>(null);
   const [creditCustomerQuery, setCreditCustomerQuery] = useState('');
   const [creditCustomerResults, setCreditCustomerResults] = useState<any[]>([]);
-<<<<<<< HEAD
   const [pendingPrint, setPendingPrint] = useState(false);
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   const { 
     items, customerId, customerName, discountAmount, discountType, grandTotal, taxBreakdown,
@@ -73,11 +67,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
 
   useEffect(() => {
     if (confirmedWarnings && !processing) {
-<<<<<<< HEAD
       processPayment(pendingPrint);
-=======
-      processPayment();
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   }, [confirmedWarnings]);
 
@@ -94,7 +84,6 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
     setAmountTendered(total.toString());
   };
 
-<<<<<<< HEAD
   const ensureCreditCustomer = async (): Promise<number | null> => {
     const { customerId, customerName } = useCartStore.getState();
     if (customerId && customerId > 0) return customerId;
@@ -109,14 +98,10 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
   };
 
   const processPayment = async (shouldPrint: boolean) => {
-=======
-  const processPayment = async () => {
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     if (processing) return;
 
     // Check for negative stock — only for inventory-tracked items
     const warnings = items
-<<<<<<< HEAD
       .filter(i => {
         if (i.is_inventory !== 1) return false;
         const deductQty = i.stock_unit === 'pack' 
@@ -130,17 +115,12 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           : i.quantity * Math.max(1, Number(i.unit_multiplier || 1));
         return `${i.product_name}: Only ${i.stock_qty} left (selling ${deductQty})`;
       });
-=======
-      .filter(i => i.is_inventory === 1 && i.quantity > i.stock_qty)
-      .map(i => `${i.product_name}: Only ${i.stock_qty} left (selling ${i.quantity})`);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
     if (warnings.length > 0 && !confirmedWarnings) {
       setStockWarnings(warnings);
       return;
     }
 
-<<<<<<< HEAD
     let resolvedCustomerId: number | undefined = customerId;
     if (method === 'credit') {
       const creditCustomerId = await ensureCreditCustomer();
@@ -170,24 +150,12 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           return;
         }
       }
-=======
-    // Credit limit pre‑validation (client‑side friendly)
-    if (method === 'credit' && customerInfo) {
-      const limit = Number(customerInfo.credit_limit) || 0;
-      const balance = Number(customerInfo.credit_balance) || 0;
-      if (limit > 0 && (balance + total) > limit) {
-        setError(`Credit limit exceeded. Limit GHS ${limit.toFixed(2)}, current balance GHS ${balance.toFixed(2)}, this sale GHS ${total.toFixed(2)} would exceed limit.`);
-        setProcessing(false);
-        return;
-      }
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
 
     setProcessing(true);
     setError('');
 
     try {
-<<<<<<< HEAD
       // Snapshot receipt context before we complete the sale.
       // (We immediately return to POS after confirm, which clears the cart.)
       const receiptSnapshot = {
@@ -202,27 +170,17 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
       const result = await window.sikapos.sales.create({
         items,
         customer_id: method === 'credit' ? resolvedCustomerId : customerId,
-=======
-      const result = await window.sikapos.sales.create({
-        items,
-        customer_id: customerId,
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         customer_name: customerName,
         cashier_name: user?.name || 'Cashier',
         payment_method: method,
         discount_amount: discountAmount,
         discount_type: discountType,
-<<<<<<< HEAD
         amount_tendered: method === 'cash' ? tendered : method === 'credit' ? 0 : total,
-=======
-        amount_tendered: method === 'cash' ? tendered : total,
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         momo_reference: method === 'momo' ? `MOMO-${Date.now()}` : undefined,
         order_type: orderType,
         order_note: orderNote,
       });
 
-<<<<<<< HEAD
       // Payment confirmation message disabled per user request
 
       // Return to POS immediately (no receipt preview)
@@ -240,21 +198,10 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
       }
     } catch (err: unknown) {
       setError(formatErrorMsg(err, 'Payment failed. Please try again.'));
-=======
-      window.sikapos.notifications.show(
-        'Payment Confirmed',
-        `GHS ${formatCurrency(total)} received via ${method === 'momo' ? 'Mobile Money' : method.toUpperCase()}.`
-      );
-
-      onComplete(result);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       setProcessing(false);
     }
   };
 
-<<<<<<< HEAD
   const buildReceiptData = async (
     result: TransactionResult,
     receiptSnapshot: {
@@ -353,10 +300,6 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
   const canComplete = () => {
     if (method === 'cash') return tendered >= total;
     if (method === 'credit') return hasCreditCustomer();
-=======
-  const canComplete = () => {
-    if (method === 'cash') return tendered >= total;
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     return true;
   };
 
@@ -368,17 +311,12 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           <div>
             <h2 className={styles.title}>Payment</h2>
             <p className={styles.subtitle}>
-<<<<<<< HEAD
               Total: <span className={styles.totalAmount}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</span>
-=======
-              Total: <span className={styles.totalAmount}>GHS {formatCurrency(total)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </p>
           </div>
           <button className={styles.closeBtn} onClick={onClose}>×</button>
         </div>
 
-<<<<<<< HEAD
         {step !== 'method' && (
           <div className={styles.topActions}>
             <button className={styles.backBtn} onClick={() => { setStep('method'); setError(''); }}>
@@ -387,8 +325,6 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           </div>
         )}
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         {/* Method selection */}
         {step === 'method' && (
           <div className={styles.methodGrid}>
@@ -416,21 +352,13 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           <div className={styles.cashStep}>
             <div className={styles.amountDisplay}>
               <p className={styles.amountLabel}>Amount to Collect</p>
-<<<<<<< HEAD
               <p className={styles.totalBig}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</p>
-=======
-              <p className={styles.totalBig}>GHS {formatCurrency(total)}</p>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </div>
 
             <div className={styles.inputGroup}>
               <label className={styles.inputLabel}>Amount Received</label>
               <div className={styles.inputWrap}>
-<<<<<<< HEAD
                 <span className={styles.inputPrefix}>{useAuthStore.getState().receiptConfig.currency}</span>
-=======
-                <span className={styles.inputPrefix}>GHS</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 <input
                   ref={cashInputRef}
                   className={styles.amountInput}
@@ -448,11 +376,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
               <button className={styles.quickBtn} onClick={handleExact}>Exact</button>
               {QUICK_AMOUNTS.map(amt => (
                 <button key={amt} className={styles.quickBtn} onClick={() => handleQuickAmount(amt)}>
-<<<<<<< HEAD
                   {useAuthStore.getState().receiptConfig.currency} {amt}
-=======
-                  GHS {amt}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </button>
               ))}
             </div>
@@ -460,11 +384,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
             {tendered > 0 && (
               <div className={`${styles.changeDisplay} ${change > 0 ? styles.changePositive : ''}`}>
                 <span>{change > 0 ? 'Give Change:' : tendered === total ? '✓ Exact amount' : 'Insufficient'}</span>
-<<<<<<< HEAD
                 {change > 0 && <span className={styles.changeAmount}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(change)}</span>}
-=======
-                {change > 0 && <span className={styles.changeAmount}>GHS {formatCurrency(change)}</span>}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
             )}
           </div>
@@ -475,11 +395,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           <div className={styles.momoStep}>
             <div className={styles.momoIcon}>📱</div>
             <p className={styles.momoTitle}>Mobile Money Payment</p>
-<<<<<<< HEAD
             <p className={styles.momoSubtitle}>Amount: {useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</p>
-=======
-            <p className={styles.momoSubtitle}>Amount: GHS {formatCurrency(total)}</p>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             <div className={styles.cardInstructions}>
               <p>1. Collect payment from customer via MoMo</p>
               <p>2. Verify that the correct amount has been received</p>
@@ -493,11 +409,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           <div className={styles.cardStep}>
             <div className={styles.cardIcon}>💳</div>
             <p className={styles.momoTitle}>Card Payment</p>
-<<<<<<< HEAD
             <p className={styles.momoSubtitle}>Amount: {useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</p>
-=======
-            <p className={styles.momoSubtitle}>Amount: GHS {formatCurrency(total)}</p>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             <div className={styles.cardInstructions}>
               <p>1. Insert or tap customer's card on the POS terminal</p>
               <p>2. Customer enters PIN if prompted</p>
@@ -525,11 +437,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
                           <h3 className={styles.warningTitle}>Outstanding Credit</h3>
                         </div>
                         <p className={styles.warningText}>
-<<<<<<< HEAD
                           This customer already has <strong>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(creditBalance)}</strong> in outstanding credit.
-=======
-                          This customer already has <strong>GHS {formatCurrency(creditBalance)}</strong> in outstanding credit.
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                         </p>
                       </div>
                     );
@@ -543,11 +451,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
                   </div>
                   <div className={styles.creditRow}>
                     <span>Amount to credit</span>
-<<<<<<< HEAD
                     <span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</span>
-=======
-                    <span>GHS {formatCurrency(total)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   </div>
                 </div>
               </>
@@ -620,7 +524,6 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
 
                 {creditCustomerQuery.trim() && creditCustomerResults.length === 0 && (
                   <button
-<<<<<<< HEAD
                     onClick={async () => {
                       const name = creditCustomerQuery.trim();
                       if (!window.sikapos) return;
@@ -630,12 +533,6 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
                         setCreditCustomerQuery('');
                         setCreditCustomerResults([]);
                       }
-=======
-                    onClick={() => {
-                      useCartStore.getState().setCustomer(0, creditCustomerQuery.trim(), 0);
-                      setCreditCustomerQuery('');
-                      setCreditCustomerResults([]);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     }}
                     style={{
                       width: '100%',
@@ -678,14 +575,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
                 className={styles.proceedBtn} 
                 onClick={() => {
                   setConfirmedWarnings(true);
-<<<<<<< HEAD
                   setStockWarnings([]);
-=======
-                  // We don't call processPayment directly to let them click the main confirm button again, 
-                  // or we can just proceed. Let's just proceed for better UX.
-                  setConfirmedWarnings(true);
-                  setTimeout(() => setProcessing(false), 0); // trigger re-render
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 }}
               >
                 Yes, Proceed anyway
@@ -703,7 +593,6 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
         {/* Actions */}
         <div className={styles.actions}>
           {step !== 'method' && (
-<<<<<<< HEAD
             <>
               <button
                 className={styles.confirmBtn}
@@ -735,28 +624,6 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
                 )}
               </button>
             </>
-=======
-            <button className={styles.backBtn} onClick={() => { setStep('method'); setError(''); }}>
-              ← Back
-            </button>
-          )}
-
-          {step !== 'method' && (
-            <button
-              className={styles.confirmBtn}
-              onClick={processPayment}
-              disabled={processing || !canComplete() || (step === 'credit' && !customerId)}
-            >
-              {processing ? (
-                <span className={styles.spinner} />
-              ) : (
-                <>
-                  Confirm Payment
-                  <span className={styles.confirmAmount}>GHS {formatCurrency(total)}</span>
-                </>
-              )}
-            </button>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           )}
         </div>
       </div>

@@ -51,7 +51,6 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-<<<<<<< HEAD
 /** SQLite-friendly local timestamp (matches `datetime('now')` storage). */
 function toSqliteLocalDatetime(d: Date = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0');
@@ -67,8 +66,6 @@ function resolveCustomerId(customerId: unknown): number | null {
   return id;
 }
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 function generateReceiptNumber(db: ReturnType<typeof getDb>): string {
   const today = new Date();
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
@@ -85,21 +82,15 @@ export function registerSalesHandlers() {
 
   ipcMain.handle('sales:create', (_event, data: {
     items: Array<{
-<<<<<<< HEAD
       cart_key?: string;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       product_id: number;
       product_name: string;
       product_barcode?: string;
       product_size?: string;
       category: string;
       quantity: number;
-<<<<<<< HEAD
       sale_unit?: 'single' | 'pack';
       unit_multiplier?: number;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       unit_price: number;
       cost_price: number;
       is_inventory: number;
@@ -141,14 +132,9 @@ export function registerSalesHandlers() {
       if (!product) {
         throw new Error(`Inventory product not found: ${item.product_name} (ID ${item.product_id})`);
       }
-<<<<<<< HEAD
       const unitsToDeduct = item.quantity * Math.max(1, Number(item.unit_multiplier || 1));
       // Allow negative stock to support "Proceed anyway" flow and real-world POS usage
       // if (product.stock_qty < unitsToDeduct) {
-=======
-      // Allow negative stock to support "Proceed anyway" flow and real-world POS usage
-      // if (product.stock_qty < item.quantity) {
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       //   throw new Error(`Insufficient stock for "${item.product_name}". Available: ${product.stock_qty}.`);
       // }
     }
@@ -157,13 +143,8 @@ export function registerSalesHandlers() {
       if (!item.product_name || typeof item.product_name !== 'string') {
         throw new Error('Each item must have a product name.');
       }
-<<<<<<< HEAD
       if (typeof item.quantity !== 'number' || item.quantity <= 0) {
         throw new Error(`Invalid quantity for "${item.product_name}". Must be a positive number.`);
-=======
-      if (typeof item.quantity !== 'number' || item.quantity <= 0 || !Number.isInteger(item.quantity)) {
-        throw new Error(`Invalid quantity for "${item.product_name}". Must be a positive integer.`);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       }
       if (typeof item.unit_price !== 'number' || item.unit_price < 0) {
         throw new Error(`Invalid price for "${item.product_name}". Must be a non-negative number.`);
@@ -193,7 +174,6 @@ export function registerSalesHandlers() {
       if (data.amount_tendered < grandTotal) {
         throw new Error(`Amount tendered (${data.amount_tendered}) is less than the total due (${grandTotal}).`);
       }
-<<<<<<< HEAD
     } else {
       const creditCustomerId = resolveCustomerId(data.customer_id);
       if (!creditCustomerId) {
@@ -211,38 +191,20 @@ export function registerSalesHandlers() {
         const projectedBalance = round2(creditBalance + grandTotal);
         if (projectedBalance > creditLimit + 0.001) {
           throw new Error(`Credit limit exceeded. Current balance: GHS ${creditBalance.toFixed(2)}, Limit: GHS ${creditLimit.toFixed(2)}, This sale: GHS ${grandTotal.toFixed(2)}, Projected: GHS ${projectedBalance.toFixed(2)}`);
-=======
-    } else if (!data.customer_id) {
-      throw new Error('Customer selection is required for credit sales.');
-    } else {
-      // Credit sale: Validate credit limit
-      const customer = db.prepare('SELECT credit_balance, credit_limit FROM customers WHERE id = ?').get(data.customer_id) as { credit_balance: number; credit_limit: number } | undefined;
-      if (customer && customer.credit_limit > 0) {
-        const projectedBalance = customer.credit_balance + grandTotal;
-        if (projectedBalance > customer.credit_limit) {
-          throw new Error(`Credit limit exceeded. Current balance: GHS ${customer.credit_balance.toFixed(2)}, Limit: GHS ${customer.credit_limit.toFixed(2)}, This sale: GHS ${grandTotal.toFixed(2)}, Projected: GHS ${projectedBalance.toFixed(2)}`);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         }
       }
     }
 
-<<<<<<< HEAD
     const isCredit = data.payment_method === 'credit';
     const storedAmountTendered = isCredit ? 0 : round2(data.amount_tendered ?? grandTotal);
     const changeGiven = isCredit
       ? 0
       : round2(Math.max(0, (data.amount_tendered || grandTotal) - grandTotal));
-=======
-    const changeGiven = round2(Math.max(0, (data.amount_tendered || grandTotal) - grandTotal));
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     const receiptNumber = generateReceiptNumber(db);
 
     // Atomic transaction
     const createTx = db.transaction(() => {
-<<<<<<< HEAD
       let customerCreditBalanceAfter: number | undefined;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       const status = data.payment_method === 'credit' ? 'debt' : 'completed';
       const paidAmount = data.payment_method === 'credit' ? 0 : grandTotal;
 
@@ -258,11 +220,7 @@ export function registerSalesHandlers() {
         round2(subtotal), round2(data.discount_amount || 0), data.discount_type || null,
         tax.vat, tax.nhil, tax.getfund, tax.covid,
         tax.totalTax, grandTotal,
-<<<<<<< HEAD
         storedAmountTendered, changeGiven,
-=======
-        round2(data.amount_tendered || grandTotal), changeGiven,
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         data.momo_reference || null, paidAmount
       );
 
@@ -271,32 +229,22 @@ export function registerSalesHandlers() {
       // Insert items and deduct stock
       for (const item of data.items) {
         db.prepare(`
-<<<<<<< HEAD
           INSERT INTO transaction_items (
             transaction_id, product_id, product_name, product_barcode, product_size, category,
             quantity, unit_price, cost_price, line_total, tax_category, sale_unit, unit_multiplier
           )
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-=======
-          INSERT INTO transaction_items (transaction_id, product_id, product_name, product_barcode, product_size, category, quantity, unit_price, cost_price, line_total, tax_category)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         `).run(
           transactionId, item.product_id || null, item.product_name,
           item.product_barcode || null, item.product_size || null, item.category || 'General',
           item.quantity, item.unit_price, item.cost_price || 0,
-<<<<<<< HEAD
           round2(item.unit_price * item.quantity), item.tax_category || 'standard',
           item.sale_unit || 'single',
           Math.max(1, Number(item.unit_multiplier || 1))
-=======
-          round2(item.unit_price * item.quantity), item.tax_category || 'standard'
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         );
 
         // Deduct stock if it's an inventory item
         if (item.product_id && item.is_inventory === 1) {
-<<<<<<< HEAD
           const prodInfo = db.prepare(`SELECT stock_unit FROM products WHERE id = ?`).get(item.product_id) as { stock_unit: string } | undefined;
           const stockUnit = prodInfo?.stock_unit || 'single';
 
@@ -330,24 +278,6 @@ export function registerSalesHandlers() {
       const saleCustomerId = resolveCustomerId(data.customer_id);
       if (saleCustomerId) {
         data.customer_id = saleCustomerId;
-=======
-          db.prepare(`
-            UPDATE products SET stock_qty = stock_qty - ?, updated_at = datetime('now')
-            WHERE id = ?
-          `).run(item.quantity, item.product_id);
-
-          // Push updated product to sync queue (priority 5 for products)
-          const updatedProduct = db.prepare(`SELECT * FROM products WHERE id = ?`).get(item.product_id);
-          db.prepare(`
-            INSERT INTO sync_queue (entity, operation, payload, status, priority)
-            VALUES ('product', 'update', ?, 'pending', 5)
-          `).run(JSON.stringify(updatedProduct));
-        }
-      }
-
-      // Update customer stats
-      if (data.customer_id) {
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         if (data.payment_method === 'credit') {
           db.prepare(`
             UPDATE customers SET credit_balance = credit_balance + ?, total_spent = total_spent + ?, loyalty_points = loyalty_points + ?, updated_at = datetime('now')
@@ -389,11 +319,7 @@ export function registerSalesHandlers() {
         discount_amount: round2(data.discount_amount || 0),
         tax: tax,
         grand_total: grandTotal,
-<<<<<<< HEAD
         amount_tendered: storedAmountTendered,
-=======
-        amount_tendered: round2(data.amount_tendered || grandTotal),
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         change_given: changeGiven,
         paid_amount: paidAmount,
         created_at: txCreatedAt,
@@ -402,11 +328,8 @@ export function registerSalesHandlers() {
           product_name: i.product_name,
           category: i.category || 'General',
           quantity: i.quantity,
-<<<<<<< HEAD
           sale_unit: i.sale_unit || 'single',
           unit_multiplier: Math.max(1, Number(i.unit_multiplier || 1)),
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           unit_price: i.unit_price,
           line_total: round2(i.unit_price * i.quantity)
         }))
@@ -417,7 +340,6 @@ export function registerSalesHandlers() {
         VALUES ('transaction', 'create', ?, 'pending', 1)
       `).run(syncPayload);
 
-<<<<<<< HEAD
       if (data.customer_id && data.payment_method === 'credit') {
         const bal = db
           .prepare('SELECT credit_balance FROM customers WHERE id = ?')
@@ -440,9 +362,6 @@ export function registerSalesHandlers() {
           ? { customerCreditBalanceAfter }
           : {}),
       };
-=======
-      return { id: transactionId, receiptNumber, grandTotal, changeGiven, tax, customerName: data.customer_name };
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     });
 
     return createTx();
@@ -498,7 +417,6 @@ export function registerSalesHandlers() {
       // 1. Restore stock
       for (const item of items) {
         if (item.product_id) {
-<<<<<<< HEAD
           const prodInfo = db.prepare(`SELECT stock_unit FROM products WHERE id = ?`).get(item.product_id) as { stock_unit: string } | undefined;
           const stockUnit = prodInfo?.stock_unit || 'single';
 
@@ -515,10 +433,6 @@ export function registerSalesHandlers() {
             db.prepare(`UPDATE products SET stock_qty = ROUND(stock_qty + ?, 2), updated_at = datetime('now') WHERE id = ?`)
               .run(unitsToRestore, item.product_id);
           }
-=======
-          db.prepare(`UPDATE products SET stock_qty = stock_qty + ?, updated_at = datetime('now') WHERE id = ?`)
-            .run(item.quantity, item.product_id);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         }
       }
 
@@ -601,22 +515,6 @@ export function registerSalesHandlers() {
       params.push(filters.cashier_name);
     }
 
-<<<<<<< HEAD
-=======
-    // 0. LOCAL CLEANUP: Remove duplicate credit_payments (handling sync retries or double-clicks)
-    // Keep only the oldest one for each amount/timestamp pair
-    db.prepare(`
-      DELETE FROM credit_payments 
-      WHERE id NOT IN (
-        SELECT MIN(id) 
-        FROM credit_payments 
-        GROUP BY amount, created_at, customer_id
-      )
-    `).run();
-
-
-
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     const summary = db.prepare(sql).get(...params) as any;
     
     // Revenue calculation internals — no debug logging for privacy
@@ -710,12 +608,8 @@ export function registerSalesHandlers() {
 
       // Attach items to each transaction
       const getItems = db.prepare(`
-<<<<<<< HEAD
         SELECT product_name, product_size, quantity, unit_price, line_total,
                sale_unit, unit_multiplier
-=======
-        SELECT product_name, product_size, quantity, unit_price, line_total
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         FROM transaction_items
         WHERE transaction_id = ?
       `);
@@ -724,20 +618,12 @@ export function registerSalesHandlers() {
         tx.items = getItems.all(tx.id);
       }
 
-<<<<<<< HEAD
       // Flat item summary: total **stock units** (singles) sold per product — boxes count as qty × unit_multiplier
-=======
-      // Flat item summary: total qty sold per product across all transactions
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       const itemSummary = db.prepare(`
         SELECT 
           ti.product_name,
           ti.product_size,
-<<<<<<< HEAD
           SUM(ti.quantity * MAX(1, COALESCE(ti.unit_multiplier, 1))) as total_qty
-=======
-          SUM(ti.quantity) as total_qty
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         FROM transaction_items ti
         INNER JOIN transactions t ON t.id = ti.transaction_id
         WHERE t.status IN ('completed', 'debt')
@@ -771,11 +657,7 @@ export function registerSalesHandlers() {
   // Shift summary: get all transactions by a specific cashier during a time window
   ipcMain.handle('sales:getByShift', (_event, params: { cashierName: string; clockIn: string; clockOut?: string }) => {
     const { cashierName, clockIn, clockOut } = params;
-<<<<<<< HEAD
     const endTime = clockOut || toSqliteLocalDatetime();
-=======
-    const endTime = clockOut || new Date().toISOString().replace('T', ' ').slice(0, 19);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
     const transactions = db.prepare(`
       SELECT t.*, 
@@ -784,11 +666,7 @@ export function registerSalesHandlers() {
       WHERE t.cashier_name = ?
         AND t.created_at >= ?
         AND t.created_at <= ?
-<<<<<<< HEAD
         AND t.status IN ${SHIFT_SALE_STATUSES}
-=======
-        AND t.status = 'completed'
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       ORDER BY t.created_at DESC
     `).all(cashierName, clockIn, endTime);
 
@@ -804,7 +682,6 @@ export function registerSalesHandlers() {
       WHERE cashier_name = ?
         AND created_at >= ?
         AND created_at <= ?
-<<<<<<< HEAD
         AND status IN ${SHIFT_SALE_STATUSES}
     `).get(cashierName, clockIn, endTime) as any;
 
@@ -818,10 +695,6 @@ export function registerSalesHandlers() {
     if (summary) {
       summary.debt_recovered = payments.total || 0;
     }
-=======
-        AND status IN ('completed', 'debt')
-    `).get(cashierName, clockIn, endTime);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
     return { transactions, summary };
   });

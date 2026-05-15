@@ -1,35 +1,26 @@
 import { formatCurrency } from '../../utils/format';
-<<<<<<< HEAD
 import {
   formatReportTransactionItemQty,
   formatStockUnitsSold,
 } from '../../utils/formatReportTransactionItemQty';
 import { useAuthStore } from '../../store/auth';
 import { showAlert } from '../../store/dialogStore';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './ReportPreviewModal.module.css';
 
 interface ReportData {
   businessName: string;
   businessLogo?: string;
   date: string;
-<<<<<<< HEAD
   isShiftReport?: boolean;
   cashierName?: string;
   shiftDuration?: string;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   summary: {
     transaction_count: number;
     total_revenue: number;
     cash_total: number;
     momo_total: number;
     credit_total: number;
-<<<<<<< HEAD
     debt_recovered: number;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   };
   transactions: Array<{
     receipt_number: string;
@@ -41,11 +32,8 @@ interface ReportData {
       quantity: number;
       unit_price: number;
       line_total: number;
-<<<<<<< HEAD
       sale_unit?: string | null;
       unit_multiplier?: number | null;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }>;
   }>;
   itemSummary?: Array<{ product_name: string; total_qty: number }>;
@@ -78,7 +66,6 @@ export default function ReportPreviewModal({ reports, onConfirm, onCancel, isPri
                 />
               )}
               <p className={styles.businessName}>{report.businessName}</p>
-<<<<<<< HEAD
               <p className={styles.reportTitle}>{report.isShiftReport ? 'SHIFT SUMMARY REPORT' : 'END OF DAY REPORT'}</p>
               <p className={styles.reportDate}>{report.date}</p>
               
@@ -89,41 +76,28 @@ export default function ReportPreviewModal({ reports, onConfirm, onCancel, isPri
                 </div>
               )}
 
-=======
-              <p className={styles.reportTitle}>END OF DAY REPORT</p>
-              <p className={styles.reportDate}>{report.date}</p>
-              
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               <div className={styles.divider} />
               
               <p className={styles.sectionTitle}>Performance Summary</p>
               <div className={styles.row}>
                 <span>Total Revenue:</span>
-<<<<<<< HEAD
                 <span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(report.summary.total_revenue)}</span>
-=======
-                <span>GHS {formatCurrency(report.summary.total_revenue)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
               <div className={styles.row}>
                 <span>Transactions:</span>
                 <span>{report.summary.transaction_count}</span>
               </div>
-<<<<<<< HEAD
               {report.summary.debt_recovered > 0 && (
                 <div className={styles.row} style={{ color: 'var(--color-success, #22c55e)' }}>
                   <span>Debt Recovered:</span>
                   <span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(report.summary.debt_recovered)}</span>
                 </div>
               )}
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               
               <div className={styles.divider} />
               
               <div className={styles.row}>
                 <span>Cash:</span>
-<<<<<<< HEAD
                 <span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(report.summary.cash_total)}</span>
               </div>
               <div className={styles.row}>
@@ -133,17 +107,6 @@ export default function ReportPreviewModal({ reports, onConfirm, onCancel, isPri
               <div className={styles.row}>
                 <span>Credit:</span>
                 <span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(report.summary.credit_total)}</span>
-=======
-                <span>GHS {formatCurrency(report.summary.cash_total)}</span>
-              </div>
-              <div className={styles.row}>
-                <span>MoMo:</span>
-                <span>GHS {formatCurrency(report.summary.momo_total)}</span>
-              </div>
-              <div className={styles.row}>
-                <span>Credit:</span>
-                <span>GHS {formatCurrency(report.summary.credit_total)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
               
               <div className={styles.divider} />
@@ -163,13 +126,8 @@ export default function ReportPreviewModal({ reports, onConfirm, onCancel, isPri
                     <div style={{ paddingLeft: '12px', fontSize: '11px', color: 'var(--color-text-muted, #888)' }}>
                       {tx.items.map((item, iIdx) => (
                         <div key={iIdx} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-<<<<<<< HEAD
                           <span>{item.product_name} × {formatReportTransactionItemQty(item)}</span>
                           <span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(item.line_total)}</span>
-=======
-                          <span>{item.product_name} × {item.quantity}</span>
-                          <span>GHS {formatCurrency(item.line_total)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                         </div>
                       ))}
                     </div>
@@ -180,20 +138,12 @@ export default function ReportPreviewModal({ reports, onConfirm, onCancel, isPri
               {report.itemSummary && report.itemSummary.length > 0 && (
                 <>
                   <div className={styles.divider} />
-<<<<<<< HEAD
                   <p className={styles.sectionTitle}>Items Sold (stock units)</p>
-=======
-                  <p className={styles.sectionTitle}>Items Sold Summary</p>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   <div style={{ fontSize: '12px' }}>
                     {report.itemSummary.map((item, iIdx) => (
                       <div key={iIdx} className={styles.row}>
                         <span>{item.product_name}</span>
-<<<<<<< HEAD
                         <span style={{ fontWeight: 600 }}>× {formatStockUnitsSold(item.total_qty)}</span>
-=======
-                        <span style={{ fontWeight: 600 }}>× {item.total_qty}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                       </div>
                     ))}
                   </div>
@@ -222,11 +172,7 @@ export default function ReportPreviewModal({ reports, onConfirm, onCancel, isPri
                   await window.sikapos.printer.saveAsPDF(reports, 'report');
                 }
               } catch (err: any) {
-<<<<<<< HEAD
                 await showAlert('Failed to save PDF: ' + err.message);
-=======
-                alert('Failed to save PDF: ' + err.message);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               }
             }} 
             disabled={isPrinting}

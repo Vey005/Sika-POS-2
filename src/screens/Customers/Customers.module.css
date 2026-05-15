@@ -97,10 +97,7 @@
 .tableWrap {
   flex: 1;
   overflow-y: auto;
-<<<<<<< HEAD
   overflow-x: auto;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   padding: var(--space-4) var(--space-6);
 }
 
@@ -333,33 +330,5 @@
 .txRef { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-primary); }
 .txDate { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
 .txAmount { font-family: var(--font-mono); font-size: 14px; color: var(--color-gold); }
-<<<<<<< HEAD
 
-/* ============================================================
-   Responsive Design
-   ============================================================ */
-
-@media (max-width: 1024px) {
-  .header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-4);
-  }
-}
-
-@media (max-width: 768px) {
-  .stats {
-    flex-direction: column;
-  }
-  
-  .searchInput {
-    width: 100%;
-  }
-
-  .modal {
-    width: 95%;
-    max-width: 400px;
-  }
-}
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
+/* =====================================================

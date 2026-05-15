@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../store/auth';
-<<<<<<< HEAD
 import { showAlert } from '../../store/dialogStore';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './ClockInToggle.module.css';
 
 interface Props {
@@ -84,11 +81,7 @@ export default function ClockInToggle({ expanded = true }: Props) {
       // Re-fetch to ensure sync with DB
       fetchStatus();
     } catch (err) {
-<<<<<<< HEAD
       await showAlert('Failed to update attendance status');
-=======
-      alert('Failed to update attendance status');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setLoading(false);
     }

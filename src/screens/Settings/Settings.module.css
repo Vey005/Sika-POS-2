@@ -707,55 +707,5 @@
   border-radius: var(--radius-md);
   margin: 0;
 }
-<<<<<<< HEAD
 
-/* ============================================================
-   Responsive Design
-   ============================================================ */
-
-@media (max-width: 1024px) {
-  .headerContent {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-}
-
-@media (max-width: 768px) {
-  .formGrid {
-    grid-template-columns: 1fr;
-  }
-  
-  .tabs {
-    padding: 0 16px;
-  }
-  
-  .body {
-    padding: 16px;
-  }
-  
-  .staffTable {
-    overflow-x: auto;
-  }
-  
-  .staffHeader, .staffRow {
-    min-width: 500px;
-  }
-
-  .aboutHero {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .recoveryStats {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .modalCard {
-    width: 95%;
-    max-width: 400px;
-  }
-}
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
+/* =====================================================

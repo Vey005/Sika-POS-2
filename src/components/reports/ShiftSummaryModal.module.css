@@ -42,18 +42,6 @@
   color: var(--color-text-primary);
 }
 
-<<<<<<< HEAD
-=======
-.staffBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  margin-top: 2px;
-}
-
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .closeBtn {
   background: none;
   border: none;
@@ -102,7 +90,6 @@
   color: var(--color-gold);
 }
 
-<<<<<<< HEAD
 .successCard {
   border-color: var(--color-success);
   background: var(--color-success-dim, rgba(34, 197, 94, 0.1));
@@ -112,8 +99,6 @@
   color: var(--color-success);
 }
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .sectionTitle {
   font-size: 14px;
   font-weight: 600;
@@ -206,7 +191,6 @@
 .closeModalBtn:hover {
   background: var(--color-elevated);
 }
-<<<<<<< HEAD
 
 .printBtn {
   background: var(--color-gold);
@@ -251,5 +235,3 @@
   color: var(--color-text-muted);
   margin-top: 4px;
 }
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf

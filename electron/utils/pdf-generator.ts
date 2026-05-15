@@ -1,10 +1,7 @@
 import { BrowserWindow, dialog, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-<<<<<<< HEAD
 import { getReceiptPaymentDisplay } from './receipt-payment';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 function escapeHtml(unsafe: any): string {
   if (unsafe === null || unsafe === undefined) return '';
@@ -16,7 +13,6 @@ function escapeHtml(unsafe: any): string {
     .replace(/'/g, '&#039;');
 }
 
-<<<<<<< HEAD
 /** Quantity label for report transaction rows (pack lines show box count + pack size). */
 function formatReportTransactionItemQty(item: {
   quantity: number;
@@ -37,8 +33,6 @@ function formatStockUnitsSold(qty: unknown): string {
   return !Number.isInteger(q) ? q.toFixed(2) : String(Math.round(q));
 }
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 function isSafeImageSrc(src: any): boolean {
   if (!src || typeof src !== 'string') return false;
   const trimmed = src.trim();
@@ -164,7 +158,6 @@ export async function saveAsPDF(data: any, type: 'receipt' | 'report') {
 function generateReceiptHtml(receipt: any) {
   const cfg = receipt.config || {};
   const cur = receipt.currency || 'GHS';
-<<<<<<< HEAD
   const paymentDisplay = getReceiptPaymentDisplay({
     paymentMethod: receipt.paymentMethod,
     status: receipt.status,
@@ -184,8 +177,6 @@ function generateReceiptHtml(receipt: any) {
   const statusBannerHtml = paymentDisplay.statusBanner
     ? `<div style="text-align:center;font-weight:bold;font-size:16px;color:#b91c1c;margin-bottom:8px;">*** ${escapeHtml(paymentDisplay.statusBanner)} ***</div>`
     : '';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   return `
     <!DOCTYPE html>
@@ -231,12 +222,8 @@ function generateReceiptHtml(receipt: any) {
         </div>
         <div style="text-align: right">
           ${cfg.showCashier !== false ? `<strong>Cashier:</strong> ${escapeHtml(receipt.cashier)}<br>` : ''}
-<<<<<<< HEAD
           <strong>Payment Method:</strong> ${escapeHtml(String(receipt.paymentMethod || '—').toUpperCase())}<br>
           ${receipt.status ? `<strong>Status:</strong> ${escapeHtml(String(receipt.status).toUpperCase())}<br>` : ''}
-=======
-          <strong>Payment Method:</strong> ${escapeHtml(receipt.paymentMethod.toUpperCase())}<br>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           ${(cfg.showOrderType !== false && receipt.orderType && receipt.orderType !== 'retail') ? `<strong>Order:</strong> ${escapeHtml(receipt.orderType.toUpperCase())}<br>` : ''}
           ${(cfg.showOrderNote !== false && receipt.orderNote) ? `<strong>Note:</strong> ${escapeHtml(receipt.orderNote)}` : ''}
         </div>
@@ -299,13 +286,8 @@ function generateReceiptHtml(receipt: any) {
       </div>
 
       <div class="payment-status">
-<<<<<<< HEAD
         ${statusBannerHtml}
         ${paymentHtml}
-=======
-        <strong>Amount Paid:</strong> ${escapeHtml(cur)} ${escapeHtml((receipt.total + receipt.change).toFixed(2))}<br>
-        <strong>Change Given:</strong> ${escapeHtml(cur)} ${escapeHtml(receipt.change.toFixed(2))}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       </div>
 
       <div class="footer">
@@ -359,7 +341,6 @@ function generateReportHtml(reports: any[]) {
           <div class="header">
             ${isSafeImageSrc(report.businessLogo) ? `<img src="${escapeHtml(report.businessLogo)}" alt="Logo" style="max-width: 80px; max-height: 80px; object-fit: contain; margin-bottom: 10px;" />` : ''}
             <div class="business-name">${escapeHtml(report.businessName)}</div>
-<<<<<<< HEAD
             <div class="report-title">${report.isShiftReport ? 'Shift Summary Report' : 'End Of Day Report'}</div>
             <div class="date">${escapeHtml(report.date)}</div>
             ${report.isShiftReport && report.cashierName ? `
@@ -368,27 +349,18 @@ function generateReportHtml(reports: any[]) {
                 ${report.shiftDuration ? `&middot; Duration: ${escapeHtml(report.shiftDuration)}` : ''}
               </div>
             ` : ''}
-=======
-            <div class="report-title">End Of Day Report</div>
-            <div class="date">${escapeHtml(report.date)}</div>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           </div>
 
           <div class="section-title">Performance Summary</div>
           <div class="summary-grid">
             <div class="summary-card">
               <div class="card-label">Total Revenue</div>
-<<<<<<< HEAD
               <div class="card-value">${escapeHtml(report.currency || 'GHS')} ${escapeHtml(report.summary.total_revenue.toFixed(2))}</div>
-=======
-              <div class="card-value">GHS ${escapeHtml(report.summary.total_revenue.toFixed(2))}</div>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </div>
             <div class="summary-card">
               <div class="card-label">Transactions</div>
               <div class="card-value">${escapeHtml(report.summary.transaction_count)}</div>
             </div>
-<<<<<<< HEAD
             ${report.summary.debt_recovered > 0 ? `
               <div class="summary-card" style="background: #e8f5e9;">
                 <div class="card-label">Debt Recovered</div>
@@ -406,19 +378,6 @@ function generateReportHtml(reports: any[]) {
             <div class="summary-card">
               <div class="card-label">Credit Total</div>
               <div class="card-value">${escapeHtml(report.currency || 'GHS')} ${escapeHtml(report.summary.credit_total.toFixed(2))}</div>
-=======
-            <div class="summary-card">
-              <div class="card-label">Cash Total</div>
-              <div class="card-value">GHS ${escapeHtml(report.summary.cash_total.toFixed(2))}</div>
-            </div>
-            <div class="summary-card">
-              <div class="card-label">MoMo Total</div>
-              <div class="card-value">GHS ${escapeHtml(report.summary.momo_total.toFixed(2))}</div>
-            </div>
-            <div class="summary-card">
-              <div class="card-label">Credit Total</div>
-              <div class="card-value">GHS ${escapeHtml(report.summary.credit_total.toFixed(2))}</div>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </div>
           </div>
 
@@ -431,11 +390,7 @@ function generateReportHtml(reports: any[]) {
                   <th>${escapeHtml(tx.receipt_number)}</th>
                   <th>${escapeHtml(new Date(tx.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }))}</th>
                   <th>${escapeHtml(tx.payment_method.toUpperCase())}</th>
-<<<<<<< HEAD
                   <th style="text-align: right">${escapeHtml(report.currency || 'GHS')} ${escapeHtml(tx.grand_total.toFixed(2))}</th>
-=======
-                  <th style="text-align: right">GHS ${escapeHtml(tx.grand_total.toFixed(2))}</th>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </tr>
               </thead>
               ${tx.items && tx.items.length > 0 ? `
@@ -445,17 +400,10 @@ function generateReportHtml(reports: any[]) {
                       <td colspan="2" style="padding-left: 20px; color: #555;">
                         ${escapeHtml(item.product_name)}
                         ${item.product_size ? `<small style="color: #d4af37;">(${escapeHtml(item.product_size)})</small>` : ''}
-<<<<<<< HEAD
                         × ${escapeHtml(formatReportTransactionItemQty(item))}
                       </td>
                       <td></td>
                       <td style="text-align: right; color: #555;">${escapeHtml(report.currency || 'GHS')} ${escapeHtml(item.line_total.toFixed(2))}</td>
-=======
-                        × ${escapeHtml(item.quantity)}
-                      </td>
-                      <td></td>
-                      <td style="text-align: right; color: #555;">GHS ${escapeHtml(item.line_total.toFixed(2))}</td>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     </tr>
                   `).join('')}
                 </tbody>
@@ -469,11 +417,7 @@ function generateReportHtml(reports: any[]) {
               <thead>
                 <tr>
                   <th>Item</th>
-<<<<<<< HEAD
                   <th style="text-align: right">Stock units sold</th>
-=======
-                  <th style="text-align: right">Total Qty Sold</th>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </tr>
               </thead>
               <tbody>
@@ -483,11 +427,7 @@ function generateReportHtml(reports: any[]) {
                       ${escapeHtml(item.product_name)}
                       ${item.product_size ? `<small style="color: #d4af37; margin-left: 6px;">(${escapeHtml(item.product_size)})</small>` : ''}
                     </td>
-<<<<<<< HEAD
                     <td style="text-align: right; font-weight: bold;">× ${escapeHtml(formatStockUnitsSold(item.total_qty))}</td>
-=======
-                    <td style="text-align: right; font-weight: bold;">× ${escapeHtml(item.total_qty)}</td>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   </tr>
                 `).join('')}
               </tbody>

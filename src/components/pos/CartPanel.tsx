@@ -4,17 +4,13 @@ import { useAuthStore } from '../../store/auth';
 import HeldSalesModal from './HeldSalesModal';
 import CustomerModal from './CustomerModal';
 import { formatCurrency } from '../../utils/format';
-<<<<<<< HEAD
 import { showAlert } from '../../store/dialogStore';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './CartPanel.module.css';
 
 interface Props {
   onCharge: () => void;
 }
 
-<<<<<<< HEAD
 import React from 'react';
 
 export default React.memo(function CartPanel({ onCharge }: Props) {
@@ -22,13 +18,6 @@ export default React.memo(function CartPanel({ onCharge }: Props) {
   const [showHeldModal, setShowHeldModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [editingQty, setEditingQty] = useState<string | null>(null);
-=======
-export default function CartPanel({ onCharge }: Props) {
-  const [heldCount, setHeldCount] = useState(0);
-  const [showHeldModal, setShowHeldModal] = useState(false);
-  const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [editingQty, setEditingQty] = useState<number | null>(null);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const [editValue, setEditValue] = useState('');
   
   const { user } = useAuthStore();
@@ -55,11 +44,7 @@ export default function CartPanel({ onCharge }: Props) {
       });
       window.sikapos.notifications.show('Kitchen Order Sent', 'The order has been sent to the kitchen printer.');
     } catch (err) {
-<<<<<<< HEAD
       await showAlert('Failed to print to kitchen');
-=======
-      alert('Failed to print to kitchen');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
@@ -87,11 +72,7 @@ export default function CartPanel({ onCharge }: Props) {
       updateHeldCount();
       window.sikapos.notifications.show('Sale Held', 'The current transaction has been saved.');
     } catch (err) {
-<<<<<<< HEAD
       await showAlert('Failed to hold sale');
-=======
-      alert('Failed to hold sale');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
@@ -156,11 +137,7 @@ export default function CartPanel({ onCharge }: Props) {
               <p className={styles.customerName}>{customerName}</p>
               {(customerCreditBalance || 0) > 0 && (
                 <p className={styles.customerCredit}>
-<<<<<<< HEAD
                   Owes: {useAuthStore.getState().receiptConfig.currency} {formatCurrency(customerCreditBalance)}
-=======
-                  Owes: GHS {formatCurrency(customerCreditBalance)}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </p>
               )}
             </div>
@@ -208,7 +185,6 @@ export default function CartPanel({ onCharge }: Props) {
           </div>
         ) : (
           items.map(item => (
-<<<<<<< HEAD
             <div key={item.cart_key} className={styles.item}>
               <div className={styles.itemInfo}>
                 <p className={styles.itemName}>{item.product_name}</p>
@@ -220,28 +196,15 @@ export default function CartPanel({ onCharge }: Props) {
                 {item.product_size && <p style={{ fontSize: '11px', color: 'var(--color-gold)', fontWeight: 600, marginTop: '-2px' }}>{item.product_size}</p>}
                 <p className={styles.itemPrice}>
                   {useAuthStore.getState().receiptConfig.currency} {formatCurrency(item.unit_price)} × {item.quantity}
-=======
-            <div key={item.product_id} className={styles.item}>
-              <div className={styles.itemInfo}>
-                <p className={styles.itemName}>{item.product_name}</p>
-                {item.product_size && <p style={{ fontSize: '11px', color: 'var(--color-gold)', fontWeight: 600, marginTop: '-2px' }}>{item.product_size}</p>}
-                <p className={styles.itemPrice}>
-                  GHS {formatCurrency(item.unit_price)} × {item.quantity}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </p>
               </div>
               <div className={styles.itemRight}>
                 <p className={styles.itemTotal}>
-<<<<<<< HEAD
                   {useAuthStore.getState().receiptConfig.currency} {formatCurrency(item.unit_price * item.quantity)}
-=======
-                  GHS {formatCurrency(item.unit_price * item.quantity)}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </p>
                 <div className={styles.qtyControls}>
                   <button
                     className={styles.qtyBtn}
-<<<<<<< HEAD
                     onClick={() => setQuantity(item.cart_key, item.quantity - 1)}
                   >−</button>
                   
@@ -251,39 +214,19 @@ export default function CartPanel({ onCharge }: Props) {
                       type="number"
                       min="0.1"
                       step="0.5"
-=======
-                    onClick={() => setQuantity(item.product_id, item.quantity - 1)}
-                  >−</button>
-                  
-                  {editingQty === item.product_id ? (
-                    <input
-                      className={styles.qtyInput}
-                      type="number"
-                      min="1"
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                       autoFocus
                       value={editValue}
                       onFocus={e => e.target.select()}
                       onChange={e => setEditValue(e.target.value)}
                       onBlur={() => {
-<<<<<<< HEAD
                         const val = parseFloat(editValue);
                         if (!isNaN(val) && val > 0) setQuantity(item.cart_key, val);
-=======
-                        const val = parseInt(editValue);
-                        if (!isNaN(val) && val > 0) setQuantity(item.product_id, val);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                         setEditingQty(null);
                       }}
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
-<<<<<<< HEAD
                           const val = parseFloat(editValue);
                           if (!isNaN(val) && val > 0) setQuantity(item.cart_key, val);
-=======
-                          const val = parseInt(editValue);
-                          if (!isNaN(val) && val > 0) setQuantity(item.product_id, val);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                           setEditingQty(null);
                         }
                         if (e.key === 'Escape') setEditingQty(null);
@@ -293,11 +236,7 @@ export default function CartPanel({ onCharge }: Props) {
                     <span 
                       className={styles.qty} 
                       onDoubleClick={() => {
-<<<<<<< HEAD
                         setEditingQty(item.cart_key);
-=======
-                        setEditingQty(item.product_id);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                         setEditValue(item.quantity.toString());
                       }}
                       title="Double click to type amount"
@@ -308,19 +247,11 @@ export default function CartPanel({ onCharge }: Props) {
 
                   <button
                     className={styles.qtyBtn}
-<<<<<<< HEAD
                     onClick={() => setQuantity(item.cart_key, item.quantity + 1)}
                   >+</button>
                   <button
                     className={`${styles.qtyBtn} ${styles.removeBtn}`}
                     onClick={() => removeItem(item.cart_key)}
-=======
-                    onClick={() => setQuantity(item.product_id, item.quantity + 1)}
-                  >+</button>
-                  <button
-                    className={`${styles.qtyBtn} ${styles.removeBtn}`}
-                    onClick={() => removeItem(item.product_id)}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     title="Remove"
                   >×</button>
                 </div>
@@ -336,11 +267,7 @@ export default function CartPanel({ onCharge }: Props) {
           <div className={styles.totals}>
             <div className={styles.totalRow}>
               <span>Subtotal</span>
-<<<<<<< HEAD
               <span className="font-mono">{useAuthStore.getState().receiptConfig.currency} {formatCurrency(sub)}</span>
-=======
-              <span className="font-mono">GHS {formatCurrency(sub)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </div>
 
             {effectiveDiscount > 0 && (
@@ -349,11 +276,7 @@ export default function CartPanel({ onCharge }: Props) {
                   Discount {discountType === 'percentage' ? `(${discountAmount}%)` : ''}
                   <button className={styles.removeDiscountBtn} onClick={clearDiscount}>×</button>
                 </span>
-<<<<<<< HEAD
                 <span className="font-mono">- {useAuthStore.getState().receiptConfig.currency} {formatCurrency(effectiveDiscount)}</span>
-=======
-                <span className="font-mono">- GHS {formatCurrency(effectiveDiscount)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
             )}
 
@@ -361,7 +284,6 @@ export default function CartPanel({ onCharge }: Props) {
               <details className={styles.taxDetails}>
                 <summary className={`${styles.totalRow} ${styles.taxSummary}`}>
                   <span>Tax (Ghana)</span>
-<<<<<<< HEAD
                   <span className="font-mono">{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tax.totalTax)}</span>
                 </summary>
                 <div className={styles.taxBreakdown}>
@@ -369,15 +291,6 @@ export default function CartPanel({ onCharge }: Props) {
                   <div className={styles.taxRow}><span>NHIL 2.5%</span><span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tax.nhil)}</span></div>
                   <div className={styles.taxRow}><span>GETFund 2.5%</span><span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tax.getfund)}</span></div>
                   <div className={styles.taxRow}><span>COVID Levy 1%</span><span>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tax.covid)}</span></div>
-=======
-                  <span className="font-mono">GHS {formatCurrency(tax.totalTax)}</span>
-                </summary>
-                <div className={styles.taxBreakdown}>
-                  <div className={styles.taxRow}><span>VAT 12.5%</span><span>GHS {formatCurrency(tax.vat)}</span></div>
-                  <div className={styles.taxRow}><span>NHIL 2.5%</span><span>GHS {formatCurrency(tax.nhil)}</span></div>
-                  <div className={styles.taxRow}><span>GETFund 2.5%</span><span>GHS {formatCurrency(tax.getfund)}</span></div>
-                  <div className={styles.taxRow}><span>COVID Levy 1%</span><span>GHS {formatCurrency(tax.covid)}</span></div>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </div>
               </details>
             )}
@@ -385,11 +298,7 @@ export default function CartPanel({ onCharge }: Props) {
             <div className={`${styles.totalRow} ${styles.grandTotalRow}`}>
               <span>TOTAL</span>
               <span className={`font-mono ${styles.grandTotalAmount}`}>
-<<<<<<< HEAD
                 {useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}
-=======
-                GHS {formatCurrency(total)}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </span>
             </div>
           </div>
@@ -415,11 +324,7 @@ export default function CartPanel({ onCharge }: Props) {
                 <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
                 <line x1="1" y1="10" x2="23" y2="10"/>
               </svg>
-<<<<<<< HEAD
               Charge {items.length > 0 && <span className={styles.chargeBtnAmount}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</span>}
-=======
-              Charge {items.length > 0 && <span className={styles.chargeBtnAmount}>GHS {formatCurrency(total)}</span>}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </button>
           </div>
 
@@ -428,8 +333,4 @@ export default function CartPanel({ onCharge }: Props) {
       )}
     </div>
   );
-<<<<<<< HEAD
 });
-=======
-}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf

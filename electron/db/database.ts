@@ -326,7 +326,6 @@ function runMigrations(db: Database.Database) {
     WHERE payment_method = 'credit' AND status = 'debt';
   `);
 
-<<<<<<< HEAD
   // V022 — Allow duplicate user PINs (remove UNIQUE constraint on users.pin)
   // Some shops intentionally share a PIN across multiple staff; this should not crash the app.
   applyMigration(22, `
@@ -375,8 +374,6 @@ function runMigrations(db: Database.Database) {
     INSERT OR IGNORE INTO settings (key, value) VALUES ('expiry_alert_months_default', '3');
   `);
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   // --- SCHEMA HARDENING ---
   // Ensure critical columns exist even if migrations were skipped/corrupted
   const harden = (table: string, column: string, type: string) => {
@@ -391,7 +388,6 @@ function runMigrations(db: Database.Database) {
   harden('transactions', 'paid_amount', 'REAL NOT NULL DEFAULT 0');
   harden('transactions', 'order_type', "TEXT DEFAULT 'retail'");
   harden('products', 'is_inventory', 'INTEGER NOT NULL DEFAULT 1');
-<<<<<<< HEAD
   harden('products', 'pack_size', 'INTEGER NOT NULL DEFAULT 1');
   harden('products', 'pack_price', 'REAL');
   harden('products', 'pack_label', "TEXT DEFAULT 'Box'");
@@ -401,9 +397,6 @@ function runMigrations(db: Database.Database) {
   harden('users', 'cashier_nav_visibility', 'TEXT');
   harden('products', 'stock_unit', "TEXT NOT NULL DEFAULT 'single'");
   harden('products', 'expiry_alert_months', 'INTEGER');
-=======
-  harden('customers', 'credit_limit', 'REAL DEFAULT 0');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 }
 
 

@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import styles from './HeldSalesModal.module.css';
 import { useCartStore } from '../../store/cart';
-<<<<<<< HEAD
 import { showAlert } from '../../store/dialogStore';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 interface HeldSale {
   id: number;
@@ -19,11 +16,7 @@ interface Props {
 
 export default function HeldSalesModal({ onClose }: Props) {
   const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
-<<<<<<< HEAD
   const loadCart = useCartStore(state => state.loadCart);
-=======
-  const { loadCart } = useCartStore();
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     loadHeldSales();
@@ -45,11 +38,7 @@ export default function HeldSalesModal({ onClose }: Props) {
       onClose();
     } catch (err) {
       console.error('Failed to resume sale:', err);
-<<<<<<< HEAD
       await showAlert('Failed to resume sale. Data might be corrupted.');
-=======
-      alert('Failed to resume sale. Data might be corrupted.');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 

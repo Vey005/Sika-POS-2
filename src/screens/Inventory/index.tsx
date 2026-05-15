@@ -1,24 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatCurrency } from '../../utils/format';
-<<<<<<< HEAD
 import { formatErrorMsg } from '../../utils/errorFormatter';
 import { formatExpiryDate, getExpiryStatus } from '../../utils/expiry';
 import { useAuthStore } from '../../store/auth';
 import { showAlert, showConfirm } from '../../store/dialogStore';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './Inventory.module.css';
 
 const EMPTY_PRODUCT: Partial<Product> = {
   name: '', barcode: '', category: 'General', unit_price: 0,
   cost_price: 0, stock_qty: 0, low_stock_threshold: 5,
-<<<<<<< HEAD
   tax_category: 'standard', unit: 'each', pack_size: 1, pack_price: 0, pack_label: 'Box', size: '', image_path: '',
   is_pharmacy: 0, is_inventory: 1, stock_unit: 'single', expiry_date: '', expiry_alert_months: null,
-=======
-  tax_category: 'standard', unit: 'each', size: '', image_path: '', is_pharmacy: 0, is_inventory: 1,
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 };
 
 export default function InventoryScreen() {
@@ -32,11 +25,8 @@ export default function InventoryScreen() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [categories, setCategories] = useState<string[]>(['All']);
   const [showLowStock, setShowLowStock] = useState(searchParams.get('filter') === 'low');
-<<<<<<< HEAD
   const [showExpiring, setShowExpiring] = useState(searchParams.get('filter') === 'expiring');
   const [defaultExpiryAlertMonths, setDefaultExpiryAlertMonths] = useState(3);
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   // Initial load for categories only
   useEffect(() => {
@@ -44,13 +34,10 @@ export default function InventoryScreen() {
     window.sikapos.inventory.getCategories().then(cats => {
       setCategories(['All', ...cats]);
     });
-<<<<<<< HEAD
     window.sikapos.settings.getBusiness().then(biz => {
       const n = parseInt(String(biz.expiry_alert_months_default ?? '3'), 10);
       setDefaultExpiryAlertMonths(Number.isFinite(n) && n >= 0 ? n : 3);
     });
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   }, []);
 
   const load = useCallback(async () => {
@@ -61,22 +48,14 @@ export default function InventoryScreen() {
         search: search,
         category: activeCategory,
         lowStock: showLowStock,
-<<<<<<< HEAD
         expiring: showExpiring,
         limit: showLowStock || showExpiring ? 500 : 150,
-=======
-        limit: showLowStock ? 500 : 150 // Show all low stock items
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       });
       setProducts(prods);
     } finally {
       setLoading(false);
     }
-<<<<<<< HEAD
   }, [search, activeCategory, showLowStock, showExpiring]);
-=======
-  }, [search, activeCategory, showLowStock]);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     const timer = setTimeout(load, 300);
@@ -86,7 +65,6 @@ export default function InventoryScreen() {
   // Sync state with URL but don't force re-renders if not needed
   useEffect(() => {
     const filter = searchParams.get('filter');
-<<<<<<< HEAD
     if (filter === 'low') {
       setShowLowStock(true);
       setShowExpiring(false);
@@ -96,17 +74,10 @@ export default function InventoryScreen() {
     } else if (!filter) {
       setShowLowStock(false);
       setShowExpiring(false);
-=======
-    if (filter === 'low' && !showLowStock) {
-      setShowLowStock(true);
-    } else if (!filter && showLowStock) {
-      setShowLowStock(false);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   }, [searchParams]);
 
   const toggleLowStock = () => {
-<<<<<<< HEAD
     const next = !showLowStock;
     setShowLowStock(next);
     setShowExpiring(false);
@@ -122,15 +93,6 @@ export default function InventoryScreen() {
     if (next) searchParams.set('filter', 'expiring');
     else searchParams.delete('filter');
     setSearchParams(searchParams);
-=======
-    if (showLowStock) {
-      searchParams.delete('filter');
-    } else {
-      searchParams.set('filter', 'low');
-    }
-    setSearchParams(searchParams);
-    setShowLowStock(!showLowStock);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   };
 
   const filtered = products; // Already filtered by backend
@@ -138,15 +100,11 @@ export default function InventoryScreen() {
   const handleSave = async () => {
     if (!window.sikapos) return;
     if (!editProduct?.name?.trim()) {
-<<<<<<< HEAD
       await showAlert('Please enter a product name before saving.');
       return;
     }
     if (editProduct.is_pharmacy === 1 && !editProduct.expiry_date?.trim()) {
       await showAlert('Expiry products need an expiry date.');
-=======
-      alert('Please enter a product name before saving.');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       return;
     }
     setSaving(true);
@@ -158,19 +116,11 @@ export default function InventoryScreen() {
         setEditProduct(null);
         window.sikapos.notifications.show('Success', 'Product saved successfully.');
       } else {
-<<<<<<< HEAD
         await showAlert(formatErrorMsg(result.message, 'Failed to save product.'));
       }
     } catch (err: any) {
       console.error('Save Error:', err);
       await showAlert(formatErrorMsg(err, 'Error saving product.'));
-=======
-        alert('Failed to save product: ' + (result.message || 'Unknown error'));
-      }
-    } catch (err: any) {
-      console.error('Save Error:', err);
-      alert('Error saving product: ' + err.message);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setSaving(false);
     }
@@ -178,7 +128,6 @@ export default function InventoryScreen() {
 
   const handleDelete = async (id: number) => {
     if (!window.sikapos) return;
-<<<<<<< HEAD
     const ok = await showConfirm('Delete this product?');
     if (!ok) return;
     try {
@@ -197,31 +146,16 @@ export default function InventoryScreen() {
     setEditProduct({ ...EMPTY_PRODUCT, expiry_alert_months: null });
     setShowForm(true);
   };
-=======
-    if (!confirm('Delete this product?')) return;
-    await window.sikapos.inventory.delete(id);
-    await load();
-  };
-
-  const openAdd = () => { setEditProduct({ ...EMPTY_PRODUCT }); setShowForm(true); };
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const openEdit = (p: Product) => { setEditProduct({ ...p }); setShowForm(true); };
 
   const handleImport = async () => {
     if (!window.sikapos) return;
     const result = await window.sikapos.inventory.importFromExcel();
     if (result.success) {
-<<<<<<< HEAD
       await showAlert(`Successfully imported ${result.count} items.`);
       await load();
     } else if (result.message !== 'Import cancelled') {
       await showAlert(`Import failed: ${formatErrorMsg(result.message)}`);
-=======
-      alert(`Successfully imported ${result.count} items.`);
-      await load();
-    } else if (result.message !== 'Import cancelled') {
-      alert(`Import failed: ${result.message}`);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
@@ -229,7 +163,6 @@ export default function InventoryScreen() {
     if (!window.sikapos) return;
     const result = await window.sikapos.inventory.downloadTemplate();
     if (result.success) {
-<<<<<<< HEAD
       await showAlert('Template downloaded successfully.');
     }
   };
@@ -256,7 +189,7 @@ export default function InventoryScreen() {
           stock_qty: p.stock_qty,
           low_stock_threshold: p.low_stock_threshold ?? 0,
         })),
-        config: receiptConfig,
+        config: { paperSize: receiptConfig.paperSize, currency: receiptConfig.currency },
       });
       window.sikapos.notifications.show(
         'Sent to printer',
@@ -264,9 +197,6 @@ export default function InventoryScreen() {
       );
     } catch (err: any) {
       await showAlert(formatErrorMsg(err, 'Failed to print low stock list.'));
-=======
-      alert('Template downloaded successfully.');
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
@@ -279,7 +209,6 @@ export default function InventoryScreen() {
           <p className={styles.subtitle}>{products.length} products</p>
         </div>
         <div className={styles.headerActions}>
-<<<<<<< HEAD
           <button className={styles.secondaryBtn} onClick={handlePrintLowStock} title="Print thermal list of low-stock items">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="6 9 6 2 18 2 18 9"/>
@@ -288,8 +217,6 @@ export default function InventoryScreen() {
             </svg>
             Print Low Stock
           </button>
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           <button className={styles.secondaryBtn} onClick={handleDownloadTemplate}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -319,7 +246,6 @@ export default function InventoryScreen() {
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-<<<<<<< HEAD
         <div className={`${styles.catPillsScroll} categoryScrollRow`}>
           <div className={styles.catPills}>
             {categories.map(cat => (
@@ -350,19 +276,6 @@ export default function InventoryScreen() {
           </button>
           <button
             type="button"
-=======
-        <div className={styles.catPills}>
-          {categories.map(cat => (
-            <button
-              key={cat}
-              className={`${styles.catPill} ${activeCategory === cat ? styles.catPillActive : ''}`}
-              onClick={() => { setActiveCategory(cat); setShowLowStock(false); searchParams.delete('filter'); setSearchParams(searchParams); }}
-            >{cat}</button>
-          ))}
-        </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <button 
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             className={`${styles.lowStockBtn} ${showLowStock ? styles.lowStockBtnActive : ''}`}
             onClick={toggleLowStock}
           >
@@ -391,11 +304,7 @@ export default function InventoryScreen() {
                 <th>Price</th>
                 <th>Cost</th>
                 <th>Stock</th>
-<<<<<<< HEAD
                 <th>{showExpiring ? 'Expiry' : 'Tax'}</th>
-=======
-                <th>Tax</th>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 <th>Actions</th>
               </tr>
             </thead>
@@ -405,13 +314,8 @@ export default function InventoryScreen() {
                   <td colSpan={7} className={styles.emptyRow}>No products found</td>
                 </tr>
               ) : filtered.map(p => {
-<<<<<<< HEAD
                 const alertMonths = p.expiry_alert_months ?? defaultExpiryAlertMonths;
                 const expiryStatus = p.is_pharmacy === 1 ? getExpiryStatus(p.expiry_date, alertMonths) : 'none';
-=======
-                const lowStock = p.stock_qty <= p.low_stock_threshold && p.stock_qty > 0;
-                const outOfStock = p.stock_qty === 0;
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 return (
                   <tr key={p.id} className={styles.tableRow} onClick={() => openEdit(p)}>
                     <td>
@@ -431,13 +335,8 @@ export default function InventoryScreen() {
                       </div>
                     </td>
                     <td><span className={styles.catTag}>{p.category}</span></td>
-<<<<<<< HEAD
                     <td className={styles.monoCell}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(p.unit_price)}</td>
                     <td className={styles.monoCell}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(p.cost_price)}</td>
-=======
-                    <td className={styles.monoCell}>GHS {formatCurrency(p.unit_price)}</td>
-                    <td className={styles.monoCell}>GHS {formatCurrency(p.cost_price)}</td>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     <td>
                       {p.is_inventory === 1 ? (
                         <span className={`
@@ -447,18 +346,13 @@ export default function InventoryScreen() {
                             p.stock_qty <= p.low_stock_threshold ? styles.stockLow : 
                             styles.stockOk}
                         `}>
-<<<<<<< HEAD
                           {p.stock_qty} {p.stock_unit === 'pack' ? (p.pack_label || 'boxes') : p.unit}
-=======
-                          {p.stock_qty} {p.unit}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                         </span>
                       ) : (
                         <span className={styles.serviceBadge}>Service</span>
                       )}
                     </td>
                     <td>
-<<<<<<< HEAD
                       {showExpiring || p.is_pharmacy === 1 ? (
                         <span className={`${styles.expiryBadge} ${
                           expiryStatus === 'expired' ? styles.expiryExpired :
@@ -470,9 +364,6 @@ export default function InventoryScreen() {
                       ) : (
                         <span className={styles.taxTag}>{p.tax_category === 'zero_rated' ? 'Zero' : p.tax_category === 'exempt' ? 'Exempt' : 'STD'}</span>
                       )}
-=======
-                      <span className={styles.taxTag}>{p.tax_category === 'zero_rated' ? 'Zero' : p.tax_category === 'exempt' ? 'Exempt' : 'STD'}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       <button className={styles.deleteBtn} onClick={() => handleDelete(p.id)}>Delete</button>
@@ -558,7 +449,6 @@ export default function InventoryScreen() {
                   <input value={editProduct.unit || 'each'} onChange={e => setEditProduct(p => ({ ...p!, unit: e.target.value }))} placeholder="each, bottle, bag..." />
                 </div>
                 <div className={styles.formField}>
-<<<<<<< HEAD
                   <label>Pack Size (units per box)</label>
                   <input type="number" min={1} value={editProduct.pack_size || 1} onChange={e => setEditProduct(p => ({ ...p!, pack_size: Math.max(1, parseInt(e.target.value) || 1) }))} />
                 </div>
@@ -578,25 +468,15 @@ export default function InventoryScreen() {
                   </select>
                 </div>
                 <div className={styles.formField}>
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   <label>Size / Volume</label>
                   <input value={editProduct.size || ''} onChange={e => setEditProduct(p => ({ ...p!, size: e.target.value }))} placeholder="e.g. 500ml, 1kg, Large" />
                 </div>
                 <div className={styles.formField}>
-<<<<<<< HEAD
                   <label>Selling Price ({useAuthStore.getState().receiptConfig.currency}) *</label>
                   <input type="number" min={0} step={0.01} value={editProduct.unit_price || 0} onChange={e => setEditProduct(p => ({ ...p!, unit_price: parseFloat(e.target.value) || 0 }))} />
                 </div>
                 <div className={styles.formField}>
                   <label>Cost Price ({useAuthStore.getState().receiptConfig.currency})</label>
-=======
-                  <label>Selling Price (GHS) *</label>
-                  <input type="number" min={0} step={0.01} value={editProduct.unit_price || 0} onChange={e => setEditProduct(p => ({ ...p!, unit_price: parseFloat(e.target.value) || 0 }))} />
-                </div>
-                <div className={styles.formField}>
-                  <label>Cost Price (GHS)</label>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   <input type="number" min={0} step={0.01} value={editProduct.cost_price || 0} onChange={e => setEditProduct(p => ({ ...p!, cost_price: parseFloat(e.target.value) || 0 }))} />
                 </div>
                 <div className={`${styles.formField} ${styles.fullWidth}`}>
@@ -624,36 +504,22 @@ export default function InventoryScreen() {
               {editProduct.is_inventory === 1 && (
                 <div className={styles.formGrid}>
                   <div className={styles.formField}>
-<<<<<<< HEAD
                     <label>Stock Quantity {editProduct.stock_unit === 'pack' ? `(${editProduct.pack_label || 'Boxes'})` : ''}</label>
                     <input type="number" step="any" value={editProduct.stock_qty ?? 0} onChange={e => setEditProduct(p => ({ ...p!, stock_qty: parseFloat(e.target.value) || 0 }))} />
                   </div>
                   <div className={styles.formField}>
                     <label>Low Stock Alert At {editProduct.stock_unit === 'pack' ? `(${editProduct.pack_label || 'Boxes'})` : ''}</label>
                     <input type="number" min={0} step="any" value={editProduct.low_stock_threshold ?? 5} onChange={e => setEditProduct(p => ({ ...p!, low_stock_threshold: parseFloat(e.target.value) || 0 }))} />
-=======
-                    <label>Stock Quantity</label>
-                    <input type="number" value={editProduct.stock_qty || 0} onChange={e => setEditProduct(p => ({ ...p!, stock_qty: parseInt(e.target.value) || 0 }))} />
-                  </div>
-                  <div className={styles.formField}>
-                    <label>Low Stock Alert At</label>
-                    <input type="number" min={0} value={editProduct.low_stock_threshold || 5} onChange={e => setEditProduct(p => ({ ...p!, low_stock_threshold: parseInt(e.target.value) || 5 }))} />
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   </div>
                 </div>
               )}
 
-<<<<<<< HEAD
               {/* Expiry product toggle */}
-=======
-              {/* Pharmacy toggle */}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               <div className={styles.pharmacyToggle}>
                 <label className={styles.toggleLabel}>
                   <input
                     type="checkbox"
                     checked={!!editProduct.is_pharmacy}
-<<<<<<< HEAD
                     onChange={e => setEditProduct(p => ({
                       ...p!,
                       is_pharmacy: e.target.checked ? 1 : 0,
@@ -661,17 +527,11 @@ export default function InventoryScreen() {
                     }))}
                   />
                   <span>Expiry product (track sell-by date)</span>
-=======
-                    onChange={e => setEditProduct(p => ({ ...p!, is_pharmacy: e.target.checked ? 1 : 0 }))}
-                  />
-                  <span>Pharmacy product</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </label>
               </div>
               {editProduct.is_pharmacy === 1 && (
                 <div className={styles.formGrid}>
                   <div className={styles.formField}>
-<<<<<<< HEAD
                     <label>Expiry Date *</label>
                     <input type="date" value={editProduct.expiry_date || ''} onChange={e => setEditProduct(p => ({ ...p!, expiry_date: e.target.value }))} />
                   </div>
@@ -699,17 +559,6 @@ export default function InventoryScreen() {
                   </div>
                   <div className={styles.formField}>
                     <label>NAFDAC / Reg. No. (optional)</label>
-=======
-                    <label>Expiry Date</label>
-                    <input type="date" value={editProduct.expiry_date || ''} onChange={e => setEditProduct(p => ({ ...p!, expiry_date: e.target.value }))} />
-                  </div>
-                  <div className={styles.formField}>
-                    <label>Batch Number</label>
-                    <input value={editProduct.batch_number || ''} onChange={e => setEditProduct(p => ({ ...p!, batch_number: e.target.value }))} />
-                  </div>
-                  <div className={styles.formField}>
-                    <label>NAFDAC Number</label>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     <input value={editProduct.nafdac_number || ''} onChange={e => setEditProduct(p => ({ ...p!, nafdac_number: e.target.value }))} />
                   </div>
                 </div>

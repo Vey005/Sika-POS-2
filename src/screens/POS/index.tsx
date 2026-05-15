@@ -6,10 +6,7 @@ import CartPanel from '../../components/pos/CartPanel';
 import PaymentModal from '../../components/pos/PaymentModal';
 import ReceiptModal from '../../components/pos/ReceiptModal';
 import styles from './POS.module.css';
-<<<<<<< HEAD
 import { isTypingInEditableField } from '../../utils/keyboard';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Beverages': '#3B82F6',
@@ -36,11 +33,7 @@ export default function POSScreen() {
   const [showClockInWarning, setShowClockInWarning] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-<<<<<<< HEAD
   const addItem = useCartStore(state => state.addItem);
-=======
-  const { addItem } = useCartStore();
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const { user } = useAuthStore();
 
   // Check if the user is clocked in before allowing a sale
@@ -99,7 +92,6 @@ export default function POSScreen() {
     setFilteredProducts(products);
   }, [products]);
 
-<<<<<<< HEAD
   // Keyboard shortcuts (do not steal focus / intercept keys while typing in other inputs, e.g. payment modal)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -108,12 +100,6 @@ export default function POSScreen() {
 
       if ((e.ctrlKey && e.key === 'f') || e.key === 'F3') {
         if (typing && !inProductSearch) return;
-=======
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey && e.key === 'f') || e.key === 'F3') {
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         e.preventDefault();
         searchRef.current?.focus();
         return;
@@ -121,21 +107,15 @@ export default function POSScreen() {
 
       // F10 = charge (with clock-in check)
       if (e.key === 'F10') {
-<<<<<<< HEAD
         if (showPayment) return;
         if (typing && !inProductSearch) return;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         e.preventDefault();
         handleCharge();
         return;
       }
 
       if (e.key === 'Escape') {
-<<<<<<< HEAD
         if (typing && !inProductSearch) return;
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         setSearchQuery('');
         searchRef.current?.blur();
         return;
@@ -144,11 +124,7 @@ export default function POSScreen() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-<<<<<<< HEAD
   }, [handleCharge, showPayment]);
-=======
-  }, [handleCharge]);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   // Native hardware barcode scanner
   useEffect(() => {
@@ -166,14 +142,10 @@ export default function POSScreen() {
 
   const handlePaymentComplete = (result: TransactionResult) => {
     setShowPayment(false);
-<<<<<<< HEAD
     // Payment is complete; return to POS immediately (no receipt preview).
     // Cart is cleared here so the cashier can start the next sale right away.
     setReceipt(null);
     useCartStore.getState().clearCart();
-=======
-    setReceipt(result);
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     loadProducts();
   };
 
@@ -202,7 +174,6 @@ export default function POSScreen() {
         </div>
 
         {/* Category tabs */}
-<<<<<<< HEAD
         <div className={`${styles.catTabsScroll} categoryScrollRow`}>
           <div className={styles.catTabs}>
             {categories.map(cat => (
@@ -215,18 +186,6 @@ export default function POSScreen() {
               </button>
             ))}
           </div>
-=======
-        <div className={styles.catTabs}>
-          {categories.map(cat => (
-            <button
-              key={cat}
-              className={`${styles.catTab} ${activeCategory === cat ? styles.catTabActive : ''}`}
-              onClick={() => setActiveCategory(cat)}
-            >
-              {cat}
-            </button>
-          ))}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         </div>
 
         {/* Product grid */}

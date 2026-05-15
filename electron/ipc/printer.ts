@@ -1,5 +1,4 @@
 import { ipcMain } from 'electron';
-<<<<<<< HEAD
 import {
   listPrinters,
   printReceipt,
@@ -9,9 +8,6 @@ import {
   printKitchenReceipt,
   openDrawer,
 } from '../hardware/printer';
-=======
-import { listPrinters, printReceipt, printReport, testPrint, printKitchenReceipt, openDrawer } from '../hardware/printer';
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import { SecureStore } from '../store/secure-store';
 import { saveAsPDF } from '../utils/pdf-generator';
 
@@ -40,15 +36,12 @@ export function registerPrinterHandlers(secureStore: SecureStore) {
     return { success: true };
   });
 
-<<<<<<< HEAD
   ipcMain.handle('printer:print-low-stock', async (_, payload) => {
     const printerDeviceId = secureStore.get('printerDeviceId');
     await printLowStockList(payload, printerDeviceId);
     return { success: true };
   });
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   ipcMain.handle('printer:test', async () => {
     const printerDeviceId = secureStore.get('printerDeviceId');
     

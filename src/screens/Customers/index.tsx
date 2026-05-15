@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { formatCurrency } from '../../utils/format';
-<<<<<<< HEAD
 import { useAuthStore } from '../../store/auth';
 import { showConfirm } from '../../store/dialogStore';
 import { formatErrorMsg } from '../../utils/errorFormatter';
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './Customers.module.css';
 
 export default function CustomersScreen() {
@@ -67,7 +64,6 @@ export default function CustomersScreen() {
     if (!payCustomer || !payAmount || !window.sikapos) return;
 
     const amount = parseFloat(payAmount);
-<<<<<<< HEAD
     if (!Number.isFinite(amount) || amount <= 0) {
       alert('Enter a valid payment amount greater than zero.');
       return;
@@ -77,13 +73,6 @@ export default function CustomersScreen() {
     if (amount > payCustomer.credit_balance) {
       const confirmed = await showConfirm(
         `Payment amount (${useAuthStore.getState().receiptConfig.currency} ${amount.toFixed(2)}) exceeds outstanding balance (${useAuthStore.getState().receiptConfig.currency} ${payCustomer.credit_balance.toFixed(2)}).\n\nContinue anyway?`
-=======
-
-    // Overpayment warning
-    if (amount > payCustomer.credit_balance) {
-      const confirmed = window.confirm(
-        `Payment amount (GHS ${amount.toFixed(2)}) exceeds outstanding balance (GHS ${payCustomer.credit_balance.toFixed(2)}).\n\nContinue anyway?`
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       );
       if (!confirmed) return;
     }
@@ -91,7 +80,6 @@ export default function CustomersScreen() {
     setSaving(true);
     try {
       const res = await window.sikapos.customers.addCreditPayment(payCustomer.id, amount, payNote, payMethod);
-<<<<<<< HEAD
       if (!res.success) {
         alert(formatErrorMsg(res.message, 'Payment failed. Please try again.'));
         return;
@@ -111,32 +99,11 @@ export default function CustomersScreen() {
       setShowPayModal(false);
       setPayAmount('');
       setPayNote('');
-=======
-      if (res.success) {
-        // Immediately update the displayed customer with new balance
-        const updatedCustomer = res.customer;
-        if (updatedCustomer) {
-          setPayCustomer(updatedCustomer);
-          // Update the customers list
-          setCustomers(prev => prev.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
-          // Update the selected profile view if it's the same customer
-          if (selected && selected.id === updatedCustomer.id) {
-            setSelected({ ...selected, ...updatedCustomer });
-          }
-        }
-        // Then reload all data to ensure consistency
-        await load();
-        setShowPayModal(false);
-        setPayAmount('');
-        setPayNote('');
-      }
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setSaving(false);
     }
   };
 
-<<<<<<< HEAD
   const handleDelete = async (id: number) => {
     if (!window.sikapos) return;
     const confirmed = await showConfirm('Are you sure you want to permanently delete this customer? All their credit history will be erased. This cannot be undone.');
@@ -152,8 +119,6 @@ export default function CustomersScreen() {
     }
   };
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   return (
     <div className={styles.screen}>
       <div className={styles.header}>
@@ -174,11 +139,7 @@ export default function CustomersScreen() {
         </div>
         <div className={styles.statCard}>
           <p className={styles.statLabel}>Total Outstanding Credit</p>
-<<<<<<< HEAD
           <p className={`${styles.statValue} ${totalDebt > 0 ? styles.danger : ''}`}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(totalDebt)}</p>
-=======
-          <p className={`${styles.statValue} ${totalDebt > 0 ? styles.danger : ''}`}>GHS {formatCurrency(totalDebt)}</p>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         </div>
         <div className={styles.statCard}>
           <p className={styles.statLabel}>Total Loyalty Points</p>
@@ -224,17 +185,10 @@ export default function CustomersScreen() {
                   </div>
                 </td>
                 <td className={styles.monoCell}>{c.phone || '—'}</td>
-<<<<<<< HEAD
                 <td className={styles.monoCell}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(c.total_spent)}</td>
                 <td>
                   {c.credit_balance > 0 ? (
                     <span className={styles.creditBadge}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(c.credit_balance)}</span>
-=======
-                <td className={styles.monoCell}>GHS {formatCurrency(c.total_spent)}</td>
-                <td>
-                  {c.credit_balance > 0 ? (
-                    <span className={styles.creditBadge}>GHS {formatCurrency(c.credit_balance)}</span>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   ) : (
                     <span className={styles.noneText}>None</span>
                   )}
@@ -271,17 +225,10 @@ export default function CustomersScreen() {
             <div className={styles.modalBody}>
               <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', marginBottom: '16px', textAlign: 'center' }}>
                 <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Outstanding Balance</p>
-<<<<<<< HEAD
                 <p style={{ fontSize: '24px', fontWeight: '700', color: 'var(--color-danger)' }}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(payCustomer.credit_balance)}</p>
               </div>
               <div className={styles.formField}>
                 <label>Amount to Pay ({useAuthStore.getState().receiptConfig.currency}) *</label>
-=======
-                <p style={{ fontSize: '24px', fontWeight: '700', color: 'var(--color-danger)' }}>GHS {formatCurrency(payCustomer.credit_balance)}</p>
-              </div>
-              <div className={styles.formField}>
-                <label>Amount to Pay (GHS) *</label>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 <input 
                   type="number" 
                   step="0.01" 
@@ -345,11 +292,7 @@ export default function CustomersScreen() {
                 <input value={editCustomer.notes || ''} onChange={e => setEditCustomer(p => ({ ...p!, notes: e.target.value }))} placeholder="Any notes about this customer" />
               </div>
               <div className={styles.formField}>
-<<<<<<< HEAD
                 <label>Credit Limit ({useAuthStore.getState().receiptConfig.currency}) <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>0 = No limit</span></label>
-=======
-                <label>Credit Limit (GHS) <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>0 = No limit</span></label>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 <input
                   type="number"
                   step="0.01"
@@ -360,7 +303,6 @@ export default function CustomersScreen() {
                 />
               </div>
             </div>
-<<<<<<< HEAD
             <div className={styles.modalFooter} style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
               <div>
                 {editCustomer.id && (
@@ -373,13 +315,6 @@ export default function CustomersScreen() {
                   {saving ? 'Saving...' : 'Save'}
                 </button>
               </div>
-=======
-            <div className={styles.modalFooter}>
-              <button className={styles.cancelBtn} onClick={() => setShowForm(false)}>Cancel</button>
-              <button className={styles.saveBtn} onClick={handleSave} disabled={saving || !editCustomer.name}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             </div>
           </div>
         </div>
@@ -397,7 +332,6 @@ export default function CustomersScreen() {
               <div className={styles.profileStats}>
                 <div>
                   <p className={styles.statLabel}>Total Spent</p>
-<<<<<<< HEAD
                   <p className={styles.statBig}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(selected.total_spent)}</p>
                 </div>
                 <div>
@@ -412,18 +346,6 @@ export default function CustomersScreen() {
                     {selected.credit_limit && selected.credit_limit > 0 
                       ? `${useAuthStore.getState().receiptConfig.currency} ${formatCurrency(selected.credit_limit)}`
                       : 'No Limit'}
-=======
-                  <p className={styles.statBig}>GHS {formatCurrency(selected.total_spent)}</p>
-                </div>
-                <div>
-                  <p className={styles.statLabel}>Credit Balance</p>
-                  </div>
-                  <div>
-                    <p className={styles.statLabel}>Credit Limit</p>
-                    <p className={`${styles.statBig} ${selected.credit_limit && selected.credit_limit > 0 ? styles.danger : ''}`}>GHS {formatCurrency(selected.credit_limit ?? 0)}</p>
-                  <p className={`${styles.statBig} ${selected.credit_balance > 0 ? styles.danger : ''}`}>
-                    GHS {formatCurrency(selected.credit_balance)}
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   </p>
                 </div>
                 <div>
@@ -452,11 +374,7 @@ export default function CustomersScreen() {
                     <p className={styles.txRef}>{tx.receipt_number}</p>
                     <p className={styles.txDate}>{new Date(tx.created_at).toLocaleDateString('en-GH')}</p>
                   </div>
-<<<<<<< HEAD
                   <p className={styles.txAmount}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tx.grand_total)}</p>
-=======
-                  <p className={styles.txAmount}>GHS {formatCurrency(tx.grand_total)}</p>
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </div>
               ))}
             </div>

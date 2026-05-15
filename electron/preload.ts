@@ -17,7 +17,6 @@ const sikapos = {
     minimize: () => ipcRenderer.send('app:minimize'),
     maximize: () => ipcRenderer.send('app:maximize'),
     close: () => ipcRenderer.send('app:close'),
-<<<<<<< HEAD
     /** Call after attendance prompt (or when no user) so the window may actually close. */
     confirmClose: () => ipcRenderer.send('app:close-confirmed'),
   },
@@ -27,8 +26,6 @@ const sikapos = {
     const listener = () => callback();
     ipcRenderer.on('app:close-intercepted', listener);
     return () => ipcRenderer.removeListener('app:close-intercepted', listener);
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   },
 
   // Inventory / Products
@@ -44,10 +41,7 @@ const sikapos = {
     getCategories: () => ipcRenderer.invoke('inventory:getCategories'),
     getSummary: () => ipcRenderer.invoke('inventory:getSummary'),
     getLowStockCount: () => ipcRenderer.invoke('inventory:getLowStockCount'),
-<<<<<<< HEAD
     getExpiringCount: () => ipcRenderer.invoke('inventory:getExpiringCount'),
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     getCategorySummary: () => ipcRenderer.invoke('inventory:getCategorySummary'),
     importFromExcel: () => ipcRenderer.invoke('inventory:import'),
     downloadTemplate: () => ipcRenderer.invoke('inventory:downloadTemplate'),
@@ -76,14 +70,9 @@ const sikapos = {
     search: (query: string) => ipcRenderer.invoke('customers:search', query),
     getById: (id: number) => ipcRenderer.invoke('customers:getById', id),
     save: (customer: unknown) => ipcRenderer.invoke('customers:save', customer),
-<<<<<<< HEAD
     delete: (id: number) => ipcRenderer.invoke('customers:delete', id),
     addCreditPayment: (customerId: number, amount: number, note: string, method?: string) =>
       ipcRenderer.invoke('customers:addCreditPayment', customerId, amount, note, method ?? 'cash'),
-=======
-    addCreditPayment: (customerId: number, amount: number, note: string) =>
-      ipcRenderer.invoke('customers:addCreditPayment', customerId, amount, note),
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   },
 
   // Settings
@@ -101,10 +90,7 @@ const sikapos = {
     printReceipt: (receipt: unknown) => ipcRenderer.invoke('printer:receipt', receipt),
     printKitchenReceipt: (order: unknown) => ipcRenderer.invoke('printer:kitchen', order),
     printReport: (report: unknown) => ipcRenderer.invoke('printer:report', report),
-<<<<<<< HEAD
     printLowStock: (payload: unknown) => ipcRenderer.invoke('printer:print-low-stock', payload),
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     testPrint: () => ipcRenderer.invoke('printer:test'),
     openDrawer: () => ipcRenderer.invoke('printer:open-drawer'),
     saveAsPDF: (data: unknown, type: 'receipt' | 'report') => ipcRenderer.invoke('printer:save-pdf', { data, type }),
@@ -123,6 +109,8 @@ const sikapos = {
   sync: {
     forceSync: () => ipcRenderer.invoke('sync:force'),
     restore: () => ipcRenderer.invoke('sync:restore'),
+    queueItem: (item: { entity: string; operation: string; payload: unknown; priority?: number }) =>
+      ipcRenderer.invoke('sync:queueItem', item),
     onStatusChange: (callback: (status: 'synced' | 'syncing' | 'error') => void) => {
       const listener = (_: any, status: 'synced' | 'syncing' | 'error') => callback(status);
       ipcRenderer.on('sync:statusChanged', listener);
@@ -133,7 +121,6 @@ const sikapos = {
   // Users (RBAC)
   users: {
     getAll: () => ipcRenderer.invoke('users:getAll'),
-<<<<<<< HEAD
     getById: (id: number) => ipcRenderer.invoke('users:getById', id),
     save: (user: unknown) => ipcRenderer.invoke('users:save', user),
     delete: (id: number) => ipcRenderer.invoke('users:delete', id),
@@ -141,13 +128,6 @@ const sikapos = {
     loginById: (userId: number, password: string) => ipcRenderer.invoke('users:loginById', userId, password),
     resetPin: (data: unknown) => ipcRenderer.invoke('users:resetPin', data),
     resetPassword: (data: unknown) => ipcRenderer.invoke('users:resetPassword', data),
-=======
-    save: (user: unknown) => ipcRenderer.invoke('users:save', user),
-    delete: (id: number) => ipcRenderer.invoke('users:delete', id),
-    login: (pin: string) => ipcRenderer.invoke('users:login', pin),
-    loginById: (userId: number, pin: string) => ipcRenderer.invoke('users:loginById', userId, pin),
-    resetPin: (data: unknown) => ipcRenderer.invoke('users:resetPin', data),
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   },
 
   // Secure Store (electron-store)
@@ -169,7 +149,6 @@ const sikapos = {
     }
   },
 
-<<<<<<< HEAD
   // App updates (electron-updater)
   updates: {
     getState: () => ipcRenderer.invoke('updates:getState'),
@@ -193,8 +172,6 @@ const sikapos = {
     },
   },
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   // Attendance
   attendance: {
     clockIn: (userId: number) => ipcRenderer.invoke('attendance:clockIn', userId),

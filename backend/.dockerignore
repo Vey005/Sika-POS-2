@@ -1,13 +1,6 @@
 node_modules
-<<<<<<< HEAD
 .env
 *.log
 portal/dist
 updates/*.exe
 updates/*.blockmap
-=======
-portal/node_modules
-portal/dist
-.env
-*.log
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf

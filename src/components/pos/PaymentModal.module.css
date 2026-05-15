@@ -306,13 +306,10 @@
   animation: fadeIn 0.2s ease;
 }
 
-<<<<<<< HEAD
 .topActions {
   padding: var(--space-3) var(--space-6) 0;
 }
 
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 /* Actions */
 .actions {
   display: flex;

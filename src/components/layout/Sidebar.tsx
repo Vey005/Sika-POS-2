@@ -3,7 +3,6 @@ import { NavLink } from 'react-router-dom';
 import styles from './Sidebar.module.css';
 import { useAuthStore } from '../../store/auth';
 import { useThemeStore } from '../../store/theme';
-<<<<<<< HEAD
 import type { CashierNavTabId } from '../../constants/cashierNav';
 import ClockInToggle from '../common/ClockInToggle';
 
@@ -16,12 +15,6 @@ const navItems: Array<{
 }> = [
   {
     id: 'pos',
-=======
-import ClockInToggle from '../common/ClockInToggle';
-
-const navItems = [
-  {
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     path: '/pos',
     label: 'POS',
     icon: (
@@ -33,10 +26,7 @@ const navItems = [
     ),
   },
   {
-<<<<<<< HEAD
     id: 'inventory',
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     path: '/inventory',
     label: 'Inventory',
     roles: ['admin', 'manager'],
@@ -49,10 +39,7 @@ const navItems = [
     ),
   },
   {
-<<<<<<< HEAD
     id: 'customers',
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     path: '/customers',
     label: 'Customers',
     icon: (
@@ -65,10 +52,7 @@ const navItems = [
     ),
   },
   {
-<<<<<<< HEAD
     id: 'dashboard',
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     path: '/dashboard',
     label: 'Dashboard',
     roles: ['cashier'],
@@ -82,10 +66,7 @@ const navItems = [
     ),
   },
   {
-<<<<<<< HEAD
     id: 'reports',
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     path: '/reports',
     label: 'Reports',
     roles: ['admin', 'manager'],
@@ -98,10 +79,7 @@ const navItems = [
     ),
   },
   {
-<<<<<<< HEAD
     id: 'settings',
-=======
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     path: '/settings',
     label: 'Settings',
     roles: ['admin', 'manager'],
@@ -117,7 +95,6 @@ const navItems = [
 export default function Sidebar() {
   const [expanded, setExpanded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
-<<<<<<< HEAD
   const { user, cashierNavVisibility } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
 
@@ -128,30 +105,11 @@ export default function Sidebar() {
     }
     return !item.roles || item.roles.includes(user.role);
   });
-=======
-  const { logout, user } = useAuthStore();
-  const { theme, toggleTheme } = useThemeStore();
-
-  const visibleNavItems = navItems.filter(item => 
-    !item.roles || (user?.role && item.roles.includes(user.role))
-  );
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     if (!window.sikapos?.sync) return;
     const cleanup = window.sikapos.sync.onStatusChange((status) => {
       setSyncStatus(status);
-<<<<<<< HEAD
-=======
-      
-      if (status === 'error') {
-        window.sikapos.notifications.show('Sync Error', 'Could not connect to SikaPOS Cloud.');
-      } else if (status === 'synced') {
-        // Only notify if we were previously syncing (to avoid notification on boot)
-        // Note: For simplicity, we just notify here, but could use a ref to check previous state
-        // window.sikapos.notifications.show('Sync Complete', 'All data is up to date.');
-      }
->>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     });
     return cleanup;
   }, []);
