@@ -3,7 +3,7 @@
  * Railway /generic fallback — set USE_GITHUB_RELEASES = false and UPDATE_FEED_URL instead.
  */
 export const GITHUB_OWNER = 'Vey005';
-export const GITHUB_REPO = 'Sika-POS';
+export const GITHUB_REPO = 'Sika-POS-2';
 
 /** Set false to use Railway/generic URL below instead of GitHub */
 export const USE_GITHUB_RELEASES =

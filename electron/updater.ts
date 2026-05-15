@@ -128,9 +128,13 @@ export function initAutoUpdater() {
 
   autoUpdater.on('error', err => {
     console.error('[Updates]', err);
+    const raw = err.message || String(err);
+    const friendly = /sending request for url/i.test(raw)
+      ? 'Could not reach the update server. Check your internet connection, or try again later.'
+      : raw;
     setState({
       status: 'error',
-      error: err.message,
+      error: friendly,
       message: 'Could not check for updates.',
     });
   });

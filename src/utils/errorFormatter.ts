@@ -38,8 +38,14 @@ export function formatErrorMsg(err: unknown, defaultMessage: string = 'An unexpe
     return 'The database is currently busy or encountered an issue. Please try again.';
   }
 
-  if (lowerMsg.includes('network error') || lowerMsg.includes('failed to fetch') || lowerMsg.includes('econnrefused')) {
-    return 'Connection issue. Please check your network or cloud connection.';
+  if (
+    lowerMsg.includes('network error') ||
+    lowerMsg.includes('failed to fetch') ||
+    lowerMsg.includes('econnrefused') ||
+    lowerMsg.includes('sending request for url') ||
+    lowerMsg.includes('backboard.railway')
+  ) {
+    return 'Connection issue. Please check your internet, VPN/firewall, or try again in a few minutes.';
   }
 
   return msg || defaultMessage;
