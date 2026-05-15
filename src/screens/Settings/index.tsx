@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+<<<<<<< HEAD
 import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import {
@@ -23,6 +24,12 @@ const CASHIER_NAV_LABELS: Record<CashierNavTabId, string> = {
   settings: 'Settings',
 };
 
+=======
+import { useAuthStore } from '../../store/auth';
+import { CLOUD_SERVER_URL } from '../../config';
+import styles from './Settings.module.css';
+
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 type Tab = 'business' | 'staff' | 'hardware' | 'cloud' | 'about';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -34,6 +41,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 ];
 
 export default function SettingsScreen() {
+<<<<<<< HEAD
   const [searchParams] = useSearchParams();
   const { setBusinessInfo, businessLogo, setBusinessLogo } = useAuthStore();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -42,6 +50,10 @@ export default function SettingsScreen() {
       ? tab
       : 'business';
   });
+=======
+  const { setBusinessInfo, businessLogo, setBusinessLogo } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<Tab>('business');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const [settings, setSettings] = useState({
     business_name: '',
     business_address: '',
@@ -55,7 +67,10 @@ export default function SettingsScreen() {
     sms_api_key: '',
     sms_sender_id: '',
     custom_categories: '',
+<<<<<<< HEAD
     expiry_alert_months_default: '3',
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   });
   const [taxConfig, setTaxConfig] = useState([
     { id: 'vat', name: 'VAT', rate: 12.5 },
@@ -75,15 +90,23 @@ export default function SettingsScreen() {
     showPhone: true,
     showTIN: true,
     showBarcode: true,
+<<<<<<< HEAD
     currency: 'GH₵',
     paperSize: '80mm',
   });
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingPrinters, setLoadingPrinters] = useState(false);
+=======
+    currency: 'GHS',
+    paperSize: '80mm',
+  });
+  const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const [saving, setSaving] = useState(false);
   const [savingInventory, setSavingInventory] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [saved, setSaved] = useState(false);
+<<<<<<< HEAD
   const [appVersion, setAppVersion] = useState('…');
 
   const [cashierNav, setCashierNav] = useState(() => mergeCashierNavVisibility(undefined));
@@ -94,10 +117,17 @@ export default function SettingsScreen() {
   const [staff, setStaff] = useState<Array<{ id: number; name: string; role: string; created_at: string; cashier_nav_visibility?: string | null }>>([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<{ id?: number; name: string; password: string; role: string } | null>(null);
+=======
+
+  const [staff, setStaff] = useState<Array<{ id: number; name: string; role: string; created_at: string }>>([]);
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<{ id?: number; name: string; pin: string; role: string } | null>(null);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const [staffError, setStaffError] = useState('');
   const { user } = useAuthStore();
 
   useEffect(() => {
+<<<<<<< HEAD
     const tab = searchParams.get('tab');
     if (tab === 'about' || tab === 'staff' || tab === 'hardware' || tab === 'cloud') {
       setActiveTab(tab);
@@ -105,6 +135,8 @@ export default function SettingsScreen() {
   }, [searchParams]);
 
   useEffect(() => {
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     if (!window.sikapos) return;
     window.sikapos.settings.getBusiness().then(biz => {
       setSettings(s => ({
@@ -120,7 +152,10 @@ export default function SettingsScreen() {
         sms_api_key: biz.sms_api_key || '',
         sms_sender_id: biz.sms_sender_id || '',
         custom_categories: biz.custom_categories || '',
+<<<<<<< HEAD
         expiry_alert_months_default: biz.expiry_alert_months_default || '3',
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       }));
       if (biz.tax_config) {
         try { setTaxConfig(JSON.parse(biz.tax_config)); } catch(e) {}
@@ -128,7 +163,10 @@ export default function SettingsScreen() {
       if (biz.receipt_config) {
         try { setReceiptConfig(rc => ({ ...rc, ...JSON.parse(biz.receipt_config) })); } catch(e) {}
       }
+<<<<<<< HEAD
       setCashierNav(mergeCashierNavVisibility(biz.cashier_nav_visibility));
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     });
     if (window.sikapos.printer) {
       window.sikapos.printer.listPrinters().then(setPrinters);
@@ -137,6 +175,7 @@ export default function SettingsScreen() {
       if (val) setSettings(s => ({ ...s, printerDeviceId: val }));
     });
     loadStaff();
+<<<<<<< HEAD
     window.sikapos?.updates?.getState().then(s => setAppVersion(s.currentVersion));
   }, []);
 
@@ -151,6 +190,10 @@ export default function SettingsScreen() {
     }
   };
 
+=======
+  }, []);
+
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const loadStaff = async () => {
     if (window.sikapos?.users) {
       const users = await window.sikapos.users.getAll();
@@ -176,15 +219,21 @@ export default function SettingsScreen() {
         custom_categories: settings.custom_categories,
         tax_config: JSON.stringify(taxConfig),
         receipt_config: JSON.stringify(receiptConfig),
+<<<<<<< HEAD
         cashier_nav_visibility: JSON.stringify(cashierNav),
         expiry_alert_months_default: settings.expiry_alert_months_default,
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       });
       await window.sikapos.secureStore.set('printerDeviceId', settings.printerDeviceId);
       setBusinessInfo(settings.business_name);
       useAuthStore.getState().setReceiptFooter(settings.receipt_footer);
       useAuthStore.getState().setTaxConfig(taxConfig);
       useAuthStore.getState().setReceiptConfig(receiptConfig);
+<<<<<<< HEAD
       useAuthStore.getState().setCashierNavVisibility(cashierNav);
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
       // --- Sync Business Info (Name & Logo) to Cloud Portal via Sync Queue ---
       const businessLogo = await window.sikapos?.secureStore.get('business_logo');
@@ -210,6 +259,7 @@ export default function SettingsScreen() {
   const handleSaveStaff = async () => {
     if (!editingStaff) return;
     setStaffError('');
+<<<<<<< HEAD
     if (!editingStaff.name || (!editingStaff.id && (!editingStaff.password || editingStaff.password.length < 4))) {
       setStaffError('Name and password (min 4 characters) are required for new staff');
       return;
@@ -226,22 +276,46 @@ export default function SettingsScreen() {
             : null
           : null;
       await window.sikapos.users.save({ ...editingStaff, cashier_nav_visibility });
+=======
+    if (!editingStaff.name || (!editingStaff.id && (!editingStaff.pin || editingStaff.pin.length !== 4))) {
+      setStaffError('Name and 4-digit PIN are required for new staff');
+      return;
+    }
+    if (editingStaff.pin && editingStaff.pin.length !== 4) {
+      setStaffError('PIN must be exactly 4 digits');
+      return;
+    }
+    try {
+      await window.sikapos.users.save(editingStaff);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       setShowStaffModal(false);
       setEditingStaff(null);
       loadStaff();
     } catch (err: any) {
+<<<<<<< HEAD
       setStaffError(formatErrorMsg(err, 'Failed to save staff'));
+=======
+      setStaffError(err.message || 'Failed to save staff');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   };
 
   const handleDeleteStaff = async (id: number) => {
+<<<<<<< HEAD
     const ok = await showConfirm('Are you sure you want to delete this staff member?');
     if (ok) {
+=======
+    if (window.confirm('Are you sure you want to delete this staff member?')) {
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       try {
         await window.sikapos.users.delete(id);
         loadStaff();
       } catch (err: any) {
+<<<<<<< HEAD
         await showAlert(formatErrorMsg(err, 'Failed to delete staff'));
+=======
+        alert(err.message || 'Failed to delete staff');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       }
     }
   };
@@ -253,6 +327,7 @@ export default function SettingsScreen() {
     try {
       const allProducts = await window.sikapos.inventory.getAll({ limit: 1000 });
       if (allProducts.length === 0) {
+<<<<<<< HEAD
         await showAlert('No products found in inventory to clear.');
         return;
       }
@@ -263,6 +338,18 @@ export default function SettingsScreen() {
     }
     
     const confirmed = await showConfirm('This will permanently clear all inventory and synchronize the deletion with the cloud. This cannot be undone. Continue?');
+=======
+        alert('No products found in inventory to clear.');
+        return;
+      }
+    } catch (err) {
+      console.error('Error checking products:', err);
+      alert('Error checking products: ' + err.message);
+      return;
+    }
+    
+    const confirmed = confirm('This will permanently clear all inventory and synchronize the deletion with the cloud. This cannot be undone. Continue?');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     if (!confirmed) return;
 
     setSavingInventory(true);
@@ -270,6 +357,7 @@ export default function SettingsScreen() {
       const result = await window.sikapos.inventory.clearAll();
       if (result.success) {
         window.sikapos.notifications.show('Inventory Cleared', `Removed ${result.count} products and queued sync.`);
+<<<<<<< HEAD
         await showAlert(`All ${result.count} products cleared successfully. Cloud sync initiated.`);
       } else {
         await showAlert(`Failed to clear inventory: ${formatErrorMsg(result.message)}`);
@@ -277,14 +365,27 @@ export default function SettingsScreen() {
     } catch (err: any) {
       console.error('Error clearing inventory:', err);
       await showAlert(`Error clearing inventory: ${formatErrorMsg(err)}`);
+=======
+        alert(`All ${result.count} products cleared successfully. Cloud sync initiated.`);
+      } else {
+        alert('Failed to clear inventory: ' + result.message);
+      }
+    } catch (err: any) {
+      console.error('Error clearing inventory:', err);
+      alert('Error clearing inventory: ' + err.message);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setSavingInventory(false);
     }
   };
 
   const handleCloudRestore = async () => {
+<<<<<<< HEAD
     const ok = await showConfirm('This will download all data from the cloud and merge it with your local data. Continue?');
     if (!ok) return;
+=======
+    if (!window.confirm('This will download all data from the cloud and merge it with your local data. Continue?')) return;
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     setSaving(true);
     try {
       const res = await window.sikapos.sync.restore();
@@ -294,7 +395,11 @@ export default function SettingsScreen() {
         setTimeout(() => window.location.reload(), 2000);
       }
     } catch (err: any) {
+<<<<<<< HEAD
       await showAlert(`Cloud recovery failed: ${formatErrorMsg(err)}`);
+=======
+      alert('Cloud recovery failed: ' + err.message);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setSaving(false);
     }
@@ -306,7 +411,11 @@ export default function SettingsScreen() {
     try {
       const allProducts = await window.sikapos.inventory.getAll({ limit: 99999 });
       if (!allProducts || allProducts.length === 0) {
+<<<<<<< HEAD
         await showAlert('No products found in inventory to export.');
+=======
+        alert('No products found in inventory to export.');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         return;
       }
 
@@ -342,7 +451,11 @@ export default function SettingsScreen() {
       window.sikapos.notifications.show('Export Complete', `${allProducts.length} products exported to CSV.`);
     } catch (err: any) {
       console.error('Export error:', err);
+<<<<<<< HEAD
       await showAlert(`Export failed: ${formatErrorMsg(err)}`);
+=======
+      alert('Export failed: ' + (err.message || 'Unknown error'));
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setExporting(false);
     }
@@ -502,6 +615,7 @@ export default function SettingsScreen() {
                   <input value={settings.custom_categories} onChange={e => setSettings(s => ({ ...s, custom_categories: e.target.value }))} placeholder="E.g. Beverages, Food, Electronics (comma separated)" />
                   <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>These will appear in the category dropdown when adding inventory items.</p>
                 </div>
+<<<<<<< HEAD
                 <div className={styles.formField}>
                   <label>Default expiry alert (months)</label>
                   <input
@@ -515,6 +629,8 @@ export default function SettingsScreen() {
                     Expiry products show in Expiring Soon this many months before sell-by. Use 0 to alert only after expiry.
                   </p>
                 </div>
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 <div className={`${styles.formField} ${styles.fullWidth}`}>
                   <label>Daily Report Phone Number (WhatsApp/SMS)</label>
                   <input value={settings.owner_whatsapp} onChange={e => setSettings(s => ({ ...s, owner_whatsapp: e.target.value }))} placeholder="e.g. 233240000000" />
@@ -583,14 +699,21 @@ export default function SettingsScreen() {
                 <div className={styles.formGrid} style={{ gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className={styles.formField}>
                     <label>Currency Symbol</label>
+<<<<<<< HEAD
                     <input value={receiptConfig.currency} onChange={e => setReceiptConfig(rc => ({ ...rc, currency: e.target.value }))} placeholder="GH₵" />
+=======
+                    <input value={receiptConfig.currency} onChange={e => setReceiptConfig(rc => ({ ...rc, currency: e.target.value }))} placeholder="GHS" />
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   </div>
                   <div className={styles.formField}>
                     <label>Paper Size</label>
                     <select value={receiptConfig.paperSize || '80mm'} onChange={e => setReceiptConfig(rc => ({ ...rc, paperSize: e.target.value }))}>
                       <option value="80mm">80mm (Standard)</option>
                       <option value="58mm">58mm (Small)</option>
+<<<<<<< HEAD
                       <option value="40mm">40mm (Extra Small)</option>
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     </select>
                   </div>
                 </div>
@@ -634,6 +757,7 @@ export default function SettingsScreen() {
               </div>
             </div>
 
+<<<<<<< HEAD
             {(user?.role === 'admin' || user?.role === 'manager') && (
               <div className={styles.card}>
                 <div className={styles.cardHeader}>
@@ -689,6 +813,8 @@ export default function SettingsScreen() {
               </div>
             )}
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           </div>
         )}
 
@@ -702,6 +828,7 @@ export default function SettingsScreen() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <h3 className={styles.cardTitle}>Staff Management</h3>
+<<<<<<< HEAD
                   <p className={styles.cardDesc}>Manage cashiers and admins.</p>
                 </div>
                 <button
@@ -714,6 +841,11 @@ export default function SettingsScreen() {
                     setShowStaffModal(true);
                   }}
                 >
+=======
+                  <p className={styles.cardDesc}>Manage cashiers and admins. Each user gets a unique 4-digit PIN.</p>
+                </div>
+                <button className={styles.saveBtn} onClick={() => { setEditingStaff({ name: '', pin: '', role: 'cashier' }); setStaffError(''); setShowStaffModal(true); }}>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   + Add Staff
                 </button>
               </div>
@@ -740,6 +872,7 @@ export default function SettingsScreen() {
                     </span>
                     <span className={styles.staffDate}>{new Date(s.created_at).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                     <div className={styles.staffActions}>
+<<<<<<< HEAD
                       <button
                         className={styles.editBtn}
                         onClick={() => {
@@ -756,6 +889,9 @@ export default function SettingsScreen() {
                       >
                         Edit
                       </button>
+=======
+                      <button className={styles.editBtn} onClick={() => { setEditingStaff({ id: s.id, name: s.name, pin: '', role: s.role }); setStaffError(''); setShowStaffModal(true); }}>Edit</button>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                       <button className={styles.deleteBtn} onClick={() => handleDeleteStaff(s.id)}>Delete</button>
                     </div>
                   </div>
@@ -781,6 +917,7 @@ export default function SettingsScreen() {
               <div className={styles.formGrid}>
                 <div className={`${styles.formField} ${styles.fullWidth}`}>
                   <label>Connected USB Printers</label>
+<<<<<<< HEAD
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <select
                       className={styles.select}
@@ -841,6 +978,26 @@ export default function SettingsScreen() {
                     await showAlert(`Action failed: ${e.message}\n\nCheck printer connection and WinUSB driver.`);
                   }
                 }}>
+=======
+                  <select
+                    className={styles.select}
+                    value={settings.printerDeviceId}
+                    onChange={e => setSettings(s => ({ ...s, printerDeviceId: e.target.value }))}
+                  >
+                    <option value="">-- Select Printer --</option>
+                    {printers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className={styles.cardActions}>
+                <button className={styles.outlineBtn} onClick={() => window.sikapos?.printer?.testPrint()}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  Print Test Page
+                </button>
+                <button className={styles.outlineBtn} onClick={() => window.sikapos?.printer?.openDrawer()}>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 11v2"/><path d="M3 8V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/></svg>
                   Open Cash Drawer
                 </button>
@@ -941,11 +1098,19 @@ export default function SettingsScreen() {
                         if (res.ok) {
                           window.sikapos.notifications.show('Cloud Synced', 'Store identity updated on the portal.');
                         } else {
+<<<<<<< HEAD
                           await showAlert(`Sync failed: ${data.message || 'Server error'}`);
                         }
                       } catch (e: any) {
                         console.error('[Sync] Identity sync failed:', e);
                         await showAlert(`Sync failed: ${e.message}. The cloud server might still be building - please try again in 1 minute.`);
+=======
+                          alert(`Sync failed: ${data.message || 'Server error'}`);
+                        }
+                      } catch (e: any) {
+                        console.error('[Sync] Identity sync failed:', e);
+                        alert(`Sync failed: ${e.message}. The cloud server might still be building - please try again in 1 minute.`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                       } finally {
                         setSaving(false);
                       }
@@ -1008,10 +1173,16 @@ export default function SettingsScreen() {
                 <div>
                   <h2 className={styles.aboutName}>SikaPOS</h2>
                   <p className={styles.aboutTagline}>Point of Sale — Electron Edition</p>
+<<<<<<< HEAD
                   <span className={styles.versionBadge}>v{appVersion}</span>
                 </div>
               </div>
               <AppUpdatePanel />
+=======
+                  <span className={styles.versionBadge}>v1.0.0</span>
+                </div>
+              </div>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               <div className={styles.infoGrid}>
                 {[
                   ['Developer', 'DanniTech Solution'],
@@ -1044,6 +1215,7 @@ export default function SettingsScreen() {
               </div>
               <div className={styles.formField}>
                 <label>Role</label>
+<<<<<<< HEAD
                 <select
                   className={styles.select}
                   value={editingStaff.role}
@@ -1055,11 +1227,15 @@ export default function SettingsScreen() {
                     }
                   }}
                 >
+=======
+                <select className={styles.select} value={editingStaff.role} onChange={e => setEditingStaff({ ...editingStaff, role: e.target.value })}>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   <option value="cashier">Cashier</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
+<<<<<<< HEAD
               {editingStaff.role === 'cashier' && (
                 <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--color-border)' }}>
                   <p style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--color-text-primary)' }}>
@@ -1130,6 +1306,11 @@ export default function SettingsScreen() {
               <div className={styles.formField}>
                 <label>{editingStaff.id ? 'New Password (leave blank to keep current)' : 'Password'}</label>
                 <input type="password" value={editingStaff.password} onChange={e => setEditingStaff({ ...editingStaff, password: e.target.value })} placeholder="Enter password (min 4 characters)" />
+=======
+              <div className={styles.formField}>
+                <label>{editingStaff.id ? 'New PIN (leave blank to keep current)' : '4-Digit PIN'}</label>
+                <input type="password" maxLength={4} value={editingStaff.pin} onChange={e => setEditingStaff({ ...editingStaff, pin: e.target.value.replace(/\D/g, '') })} placeholder="••••" />
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
               {staffError && <p className={styles.staffError}>{staffError}</p>}
             </div>

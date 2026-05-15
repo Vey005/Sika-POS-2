@@ -11,11 +11,14 @@ release/
 build/
 out/
 
+<<<<<<< HEAD
 # Desktop installers (publish via GitHub Releases, not git)
 backend/updates/*.exe
 backend/updates/*.blockmap
 backend/updates/latest.yml
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 # Environment variables
 .env
 .env.local

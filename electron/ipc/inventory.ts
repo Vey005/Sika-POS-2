@@ -19,6 +19,7 @@ export interface Product {
   batch_number?: string;
   nafdac_number?: string;
   unit: string;
+<<<<<<< HEAD
   pack_size?: number;
   pack_price?: number | null;
   pack_label?: string;
@@ -26,10 +27,15 @@ export interface Product {
   size?: string;
   image_path?: string;
   expiry_alert_months?: number | null;
+=======
+  size?: string;
+  image_path?: string;
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   created_at?: string;
   updated_at?: string;
 }
 
+<<<<<<< HEAD
 function getDefaultExpiryAlertMonths(db: ReturnType<typeof getDb>): number {
   const raw = db.prepare(`SELECT value FROM settings WHERE key = 'expiry_alert_months_default'`).pluck().get() as string | undefined;
   const n = parseInt(String(raw ?? '3'), 10);
@@ -53,6 +59,12 @@ export function registerInventoryHandlers() {
     lowStock?: boolean;
     expiring?: boolean;
   }) => {
+=======
+export function registerInventoryHandlers() {
+  const db = getDb();
+
+  ipcMain.handle('inventory:getAll', (_event, filters?: { search?: string, category?: string, limit?: number, lowStock?: boolean }) => {
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     let sql = `SELECT * FROM products WHERE is_active = 1`;
     const params: any[] = [];
 
@@ -60,12 +72,15 @@ export function registerInventoryHandlers() {
       sql += ` AND stock_qty <= low_stock_threshold AND is_inventory = 1`;
     }
 
+<<<<<<< HEAD
     if (filters?.expiring) {
       const defaultMonths = getDefaultExpiryAlertMonths(db);
       sql += EXPIRING_WHERE;
       params.push(defaultMonths);
     }
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     if (filters?.category && filters.category !== 'All') {
       sql += ` AND category = ?`;
       params.push(filters.category);
@@ -113,6 +128,7 @@ export function registerInventoryHandlers() {
     `).get() as { count: number }).count;
   });
 
+<<<<<<< HEAD
   ipcMain.handle('inventory:getExpiringCount', (_event) => {
     const defaultMonths = getDefaultExpiryAlertMonths(db);
     return (db.prepare(`
@@ -122,6 +138,8 @@ export function registerInventoryHandlers() {
     `).get(defaultMonths) as { count: number }).count;
   });
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   ipcMain.handle('inventory:save', (_event, product: Product) => {
     try {
       if (product.id) {
@@ -130,9 +148,13 @@ export function registerInventoryHandlers() {
           UPDATE products SET
             name = ?, barcode = ?, category = ?, unit_price = ?, cost_price = ?,
             stock_qty = ?, low_stock_threshold = ?, tax_category = ?,
+<<<<<<< HEAD
             is_pharmacy = ?, is_inventory = ?, expiry_date = ?, batch_number = ?, nafdac_number = ?, unit = ?,
             pack_size = ?, pack_price = ?, pack_label = ?, stock_unit = ?, size = ?, image_path = ?,
             expiry_alert_months = ?,
+=======
+            is_pharmacy = ?, is_inventory = ?, expiry_date = ?, batch_number = ?, nafdac_number = ?, unit = ?, size = ?, image_path = ?,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             updated_at = datetime('now')
           WHERE id = ?
         `).run(
@@ -141,6 +163,7 @@ export function registerInventoryHandlers() {
           product.low_stock_threshold, product.tax_category,
           product.is_pharmacy || 0, product.is_inventory ?? 1, product.expiry_date || null,
           product.batch_number || null, product.nafdac_number || null,
+<<<<<<< HEAD
           product.unit || 'each',
           Math.max(1, Number(product.pack_size || 1)),
           product.pack_price ?? null,
@@ -149,6 +172,9 @@ export function registerInventoryHandlers() {
           product.size || null, product.image_path || null,
           product.expiry_alert_months ?? null,
           product.id
+=======
+          product.unit || 'each', product.size || null, product.image_path || null, product.id
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         );
         
         // Push to sync queue (priority 5 for products)
@@ -162,18 +188,24 @@ export function registerInventoryHandlers() {
       } else {
         // Insert
         const result = db.prepare(`
+<<<<<<< HEAD
           INSERT INTO products (
             name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold, tax_category,
             is_pharmacy, is_inventory, expiry_date, batch_number, nafdac_number, unit,
             pack_size, pack_price, pack_label, stock_unit, size, image_path, expiry_alert_months
           )
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+=======
+          INSERT INTO products (name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold, tax_category, is_pharmacy, is_inventory, expiry_date, batch_number, nafdac_number, unit, size, image_path)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         `).run(
           product.name, product.barcode || null, product.category,
           product.unit_price, product.cost_price, product.stock_qty,
           product.low_stock_threshold, product.tax_category,
           product.is_pharmacy || 0, product.is_inventory ?? 1, product.expiry_date || null,
           product.batch_number || null, product.nafdac_number || null,
+<<<<<<< HEAD
           product.unit || 'each',
           Math.max(1, Number(product.pack_size || 1)),
           product.pack_price ?? null,
@@ -181,6 +213,9 @@ export function registerInventoryHandlers() {
           product.stock_unit || 'single',
           product.size || null, product.image_path || null,
           product.expiry_alert_months ?? null
+=======
+          product.unit || 'each', product.size || null, product.image_path || null
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         );
         const productId = result.lastInsertRowid;
         
@@ -289,19 +324,29 @@ export function registerInventoryHandlers() {
         'Barcode': '1234567890',
         'Category': 'General',
         'Unit': 'each',
+<<<<<<< HEAD
         'Pack Label': 'Box',
         'Pack Size': 10,
         'Size': '500ml',
         'Selling Price': 10.00,
         'Pack Price': 90.00,
+=======
+        'Size': '500ml',
+        'Selling Price': 10.00,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         'Cost Price': 7.00,
         'Stock Quantity': 100,
         'Low Stock Threshold': 5,
         'Tax Category (standard/zero_rated/exempt)': 'standard',
+<<<<<<< HEAD
         'Expiry product (0 or 1)': 0,
         'Expiry alert months': '',
         'Track Stock (0 or 1)': 1,
         'Stock Unit (single/pack)': 'single',
+=======
+        'Pharmacy (0 or 1)': 0,
+        'Track Stock (0 or 1)': 1,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       }
     ];
     const worksheet = XLSX.utils.json_to_sheet(template);
@@ -336,23 +381,33 @@ export function registerInventoryHandlers() {
       const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]) as any[];
 
       const insertStmt = db.prepare(`
+<<<<<<< HEAD
         INSERT INTO products (
           name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold, tax_category,
           is_pharmacy, is_inventory, unit, pack_label, pack_size, pack_price, size, stock_unit
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+=======
+        INSERT INTO products (name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold, tax_category, is_pharmacy, is_inventory, unit, size)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         ON CONFLICT(barcode) DO UPDATE SET
           name = excluded.name,
           category = excluded.category,
           unit_price = excluded.unit_price,
           cost_price = excluded.cost_price,
           stock_qty = excluded.stock_qty,
+<<<<<<< HEAD
           pack_label = excluded.pack_label,
           pack_size = excluded.pack_size,
           pack_price = excluded.pack_price,
           is_inventory = excluded.is_inventory,
           size = excluded.size,
           stock_unit = excluded.stock_unit,
+=======
+          is_inventory = excluded.is_inventory,
+          size = excluded.size,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           is_active = 1,
           updated_at = datetime('now')
       `);
@@ -368,6 +423,7 @@ export function registerInventoryHandlers() {
             parseInt(item['Stock Quantity'] || item['stock_qty']) || 0,
             parseInt(item['Low Stock Threshold'] || item['low_stock_threshold']) || 5,
             item['Tax Category (standard/zero_rated/exempt)'] || item['tax_category'] || 'standard',
+<<<<<<< HEAD
             parseInt(item['Expiry product (0 or 1)'] || item['Pharmacy (0 or 1)'] || item['is_pharmacy']) || 0,
             parseInt(item['Track Stock (0 or 1)'] ?? item['is_inventory'] ?? 1),
             item['Unit'] || item['unit'] || 'each',
@@ -381,6 +437,12 @@ export function registerInventoryHandlers() {
             })(),
             item['Size'] || item['size'] || null,
             item['Stock Unit (single/pack)'] || item['stock_unit'] || 'single'
+=======
+            parseInt(item['Pharmacy (0 or 1)'] || item['is_pharmacy']) || 0,
+            parseInt(item['Track Stock (0 or 1)'] ?? item['is_inventory'] ?? 1),
+            item['Unit'] || item['unit'] || 'each',
+            item['Size'] || item['size'] || null
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           );
         }
       });

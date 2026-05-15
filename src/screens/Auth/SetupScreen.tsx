@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import { CLOUD_SERVER_URL } from '../../config';
+<<<<<<< HEAD
 import { formatErrorMsg } from '../../utils/errorFormatter';
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './Login.module.css';
 
 export default function SetupScreen() {
@@ -19,8 +22,13 @@ export default function SetupScreen() {
 
   // Step 2: Admin account
   const [adminName, setAdminName] = useState('');
+<<<<<<< HEAD
   const [adminPassword, setAdminPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+=======
+  const [adminPin, setAdminPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,12 +80,21 @@ export default function SetupScreen() {
       setError('Admin name is required');
       return;
     }
+<<<<<<< HEAD
     if (adminPassword.length < 4) {
       setError('Password must be at least 4 characters');
       return;
     }
     if (adminPassword !== confirmPassword) {
       setError('Passwords do not match');
+=======
+    if (adminPin.length !== 4) {
+      setError('PIN must be exactly 4 digits');
+      return;
+    }
+    if (adminPin !== confirmPin) {
+      setError('PINs do not match');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       return;
     }
 
@@ -116,7 +133,11 @@ export default function SetupScreen() {
       // 3. Create the admin user
       await window.sikapos?.users.save({
         name: adminName,
+<<<<<<< HEAD
         password: adminPassword,
+=======
+        pin: adminPin,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         role: 'admin',
       });
 
@@ -147,7 +168,11 @@ export default function SetupScreen() {
       setSetupComplete(true);
       navigate('/login', { replace: true });
     } catch (err: any) {
+<<<<<<< HEAD
       setError(formatErrorMsg(err, 'Setup failed. Please try again.'));
+=======
+      setError(err.message || 'Setup failed. Please try again.');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setLoading(false);
     }
@@ -272,22 +297,44 @@ export default function SetupScreen() {
             </div>
 
             <div className={styles.inputGroup}>
+<<<<<<< HEAD
               <label>Password *</label>
               <input
                 type="password"
                 placeholder="Enter a password (min 4 characters)"
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
+=======
+              <label>4-Digit PIN *</label>
+              <input
+                type="password"
+                maxLength={4}
+                placeholder="••••"
+                value={adminPin}
+                onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, ''))}
+                style={{ textAlign: 'center', letterSpacing: '8px', fontSize: '20px' }}
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               />
             </div>
 
             <div className={styles.inputGroup}>
+<<<<<<< HEAD
               <label>Confirm Password *</label>
               <input
                 type="password"
                 placeholder="Re-enter your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+=======
+              <label>Confirm PIN *</label>
+              <input
+                type="password"
+                maxLength={4}
+                placeholder="••••"
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                style={{ textAlign: 'center', letterSpacing: '8px', fontSize: '20px' }}
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               />
             </div>
 

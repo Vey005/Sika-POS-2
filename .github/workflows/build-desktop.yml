@@ -30,9 +30,14 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
+<<<<<<< HEAD
           release/latest.yml
           release/*.exe
           release/*.blockmap
+=======
+          release/SikaPOS Setup *.exe
+          release/SikaPOS *.exe
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         draft: false
         prerelease: false
       env:

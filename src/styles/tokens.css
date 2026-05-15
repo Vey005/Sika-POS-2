@@ -46,9 +46,15 @@
   --shadow-gold: 0 0 20px rgba(212,160,23,0.2);
 
   /* === Typography === */
+<<<<<<< HEAD
   --font-display: 'Syne', 'Segoe UI', Tahoma, sans-serif;
   --font-body: 'DM Sans', 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+=======
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   /* === Spacing === */
   --space-1: 4px;
@@ -68,6 +74,7 @@
   --radius-xl: 24px;
   --radius-full: 9999px;
 
+<<<<<<< HEAD
   /* === Scrollbars (pill thumb like system vertical bar) === */
   --scrollbar-size: 12px;
   --scrollbar-size-horizontal: 5px;
@@ -78,6 +85,8 @@
   --scrollbar-thumb-active: rgba(255, 255, 255, 0.55);
   --scrollbar-radius: var(--radius-full);
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   /* === Transitions === */
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
@@ -106,11 +115,14 @@
   --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
   
   --color-gold-dim: rgba(212,160,23,0.1);
+<<<<<<< HEAD
 
   --scrollbar-gutter: var(--color-surface);
   --scrollbar-thumb: #c4c4c4;
   --scrollbar-thumb-hover: #a8a8a8;
   --scrollbar-thumb-active: #909090;
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 }
 
 [data-theme="dark"] {

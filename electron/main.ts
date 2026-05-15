@@ -14,6 +14,7 @@ import { SecureStore } from './store/secure-store';
 import { registerSecureStoreHandlers } from './ipc/secure-store';
 import { registerNotificationHandlers } from './ipc/notifications';
 import { registerAttendanceHandlers } from './ipc/attendance';
+<<<<<<< HEAD
 import { registerUpdateHandlers } from './ipc/updates';
 import { initAutoUpdater, attachUpdateWindow, scheduleStartupUpdateCheck } from './updater';
 import { UPDATE_FEED_URL, USE_GITHUB_RELEASES } from './update-config';
@@ -29,10 +30,16 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.sikapos.app');
 }
 
+=======
+
+const isDev = !app.isPackaged;
+
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
 let syncManager: SyncManager | null = null;
 
+<<<<<<< HEAD
 /** When true, the next main window `close` event may proceed without prompting the renderer. */
 let allowMainWindowClose = false;
 
@@ -42,6 +49,10 @@ let mainWindowCloseIpcRegistered = false;
 function createSplash() {
   splashWindow = new BrowserWindow({
     title: 'SikaPOS',
+=======
+function createSplash() {
+  splashWindow = new BrowserWindow({
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     width: 500,
     height: 350,
     frame: false,
@@ -187,7 +198,10 @@ function createSplash() {
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
+<<<<<<< HEAD
     title: 'SikaPOS',
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     width: 1280,
     height: 800,
     minWidth: 1024,
@@ -241,6 +255,7 @@ function createMainWindow() {
       mainWindow?.maximize();
     }
   });
+<<<<<<< HEAD
 
   mainWindow.on('close', (e) => {
     if (allowMainWindowClose) {
@@ -265,15 +280,21 @@ function createMainWindow() {
       mainWindow.webContents.send('app:close-intercepted');
     });
   }
+=======
+  ipcMain.on('app:close', () => mainWindow?.close());
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   nativeTheme.themeSource = 'dark';
   
   // Initialize native barcode scanner
   initBarcodeScanner(mainWindow);
+<<<<<<< HEAD
 
   if (mainWindow) {
     attachUpdateWindow(mainWindow);
   }
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 }
 
 app.whenReady().then(async () => {
@@ -322,18 +343,24 @@ app.whenReady().then(async () => {
   registerUserHandlers();
   registerNotificationHandlers(secureStore);
   registerAttendanceHandlers();
+<<<<<<< HEAD
   registerUpdateHandlers();
   initAutoUpdater();
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   registerPrinterHandlers(secureStore);
 
   createSplash();
   createMainWindow();
 
+<<<<<<< HEAD
   const updateConnectSrc = USE_GITHUB_RELEASES
     ? 'https://api.github.com https://github.com https://objects.githubusercontent.com'
     : new URL(UPDATE_FEED_URL).origin;
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   // Add Content-Security-Policy to all responses
   if (mainWindow) {
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -342,8 +369,13 @@ app.whenReady().then(async () => {
           ...details.responseHeaders,
           'Content-Security-Policy': [
             isDev
+<<<<<<< HEAD
               ? `default-src 'self' http://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:* https://api.mnotify.com https://apps.mnotify.net https://*.railway.app ${updateConnectSrc}`
               : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.mnotify.com https://apps.mnotify.net https://*.railway.app ${updateConnectSrc}`
+=======
+              ? "default-src 'self' http://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:* https://api.mnotify.com https://apps.mnotify.net https://*.railway.app"
+              : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.mnotify.com https://apps.mnotify.net https://*.railway.app"
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           ]
         }
       });
@@ -354,7 +386,10 @@ app.whenReady().then(async () => {
   syncManager = new SyncManager(mainWindow, secureStore);
   registerSyncHandlers(syncManager);
   syncManager.start();
+<<<<<<< HEAD
   scheduleStartupUpdateCheck();
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

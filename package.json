@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
+<<<<<<< HEAD
     "dev:electron": "wait-on tcp:5173 && tsc -p tsconfig.electron.json && electron . --disable-gpu --disable-software-rasterizer --no-sandbox",
     "build": "vite build && tsc -p tsconfig.electron.json",
     "preview": "electron . --disable-gpu --disable-software-rasterizer --no-sandbox",
@@ -16,6 +17,12 @@
     "release:github": "npm run build && electron-builder --win --publish always",
     "release:patch": "npm version patch && npm run dist:publish",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3 usb node-hid"
+=======
+    "dev:electron": "wait-on tcp:5173 && tsc -p tsconfig.electron.json && electron .",
+    "build": "vite build && tsc -p tsconfig.electron.json",
+    "preview": "electron .",
+    "dist": "npm run build && electron-builder"
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   },
   "build": {
     "appId": "com.sikapos.app",
@@ -23,7 +30,11 @@
     "directories": {
       "output": "release"
     },
+<<<<<<< HEAD
     "npmRebuild": true,
+=======
+    "npmRebuild": false,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -40,19 +51,25 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true
+<<<<<<< HEAD
     },
     "publish": {
       "provider": "github",
       "owner": "Vey005",
       "repo": "Sika-POS",
       "releaseType": "release"
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     }
   },
   "dependencies": {
     "axios": "^1.15.0",
     "better-sqlite3": "^9.4.3",
     "electron-store": "^8.1.0",
+<<<<<<< HEAD
     "electron-updater": "^6.8.3",
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     "node-hid": "^3.3.0",
     "usb": "^2.17.0",
     "xlsx": "^0.18.5",
@@ -68,7 +85,11 @@
     "@types/usb": "^2.0.4",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
+<<<<<<< HEAD
     "electron": "^29.4.6",
+=======
+    "electron": "^29.1.4",
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     "electron-builder": "^24.13.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -77,4 +98,8 @@
     "vite": "^5.2.10",
     "wait-on": "^7.2.0"
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf

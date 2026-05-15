@@ -148,7 +148,11 @@ async function replicatePayloadToReplicaTables(businessId, entity, operation, pa
       return;
     }
     case 'customer': {
+<<<<<<< HEAD
 
+=======
+      console.log(`[Replicate Customer] business=${businessId}, local_id=${localId}, balance=${payload.credit_balance}, updated_at=${payload.updated_at}`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       await q.query(
         `INSERT INTO customers (business_id, local_id, name, phone, email, credit_balance, credit_limit, loyalty_points, total_spent, notes, created_at, updated_at)
          VALUES ($1::varchar, $2::integer, $3::varchar, $4::varchar, $5::varchar, $6::float, $7::float, $8::integer, $9::float, $10::text, $11::timestamp, $12::timestamp)
@@ -177,7 +181,11 @@ async function replicatePayloadToReplicaTables(businessId, entity, operation, pa
           payload.updated_at ? new Date(payload.updated_at) : now
         ]
       );
+<<<<<<< HEAD
 
+=======
+      console.log(`[Replicate Customer] Successfully synced customer ${localId} with balance ${payload.credit_balance}`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       return;
     }
     case 'credit_payment': {
@@ -1564,7 +1572,11 @@ app.get('/api/portal/sales', requireAuth, async (req, res) => {
       dateFilter += ` AND DATE(created_at) <= $${params.length}`;
     }
 
+<<<<<<< HEAD
     console.log(`[Sales API] business=${obfuscateKey(businessId)} range=${from || 'all'}..${to || 'all'}`);
+=======
+    console.log(`[Sales API] business=${businessId} from=${from} to=${to} dateFilter=${dateFilter}`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
     const result = await pool.query(
       `SELECT *, (SELECT COUNT(*) FROM transaction_items WHERE transaction_id = transactions.id) as item_count 
@@ -1575,7 +1587,11 @@ app.get('/api/portal/sales', requireAuth, async (req, res) => {
     );
 
     const transactions = result.rows;
+<<<<<<< HEAD
 
+=======
+    console.log(`[Sales API] Found ${transactions.length} transactions after date filter`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
     const total = transactions.length;
     const offset = (page - 1) * limit;
@@ -1587,13 +1603,24 @@ app.get('/api/portal/sales', requireAuth, async (req, res) => {
     );
     const debtPaymentsTotal = paymentsRes.rows.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
     
+<<<<<<< HEAD
 
+=======
+    console.log(`[Sales API DEBUG] Found ${paymentsRes.rows.length} payments:`);
+    paymentsRes.rows.forEach(p => {
+      console.log(`  - Payment: ID=${p.id}, local_id=${p.local_id}, amount=${p.amount}, created_at=${p.created_at}`);
+    });
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
     let cashTotal = 0, momoTotal = 0, cardTotal = 0, creditTotal = 0;
     transactions.forEach(tx => {
       const t = parseFloat(tx.grand_total || 0);
       const method = (tx.payment_method || 'cash').trim().toLowerCase();
+<<<<<<< HEAD
 
+=======
+      console.log(`[Sales API DEBUG] TX: ${tx.receipt_number}, method: "${tx.payment_method}" -> normalized: "${method}", total: ${t}`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       
       if (method === 'cash') cashTotal += t;
       else if (method === 'momo') momoTotal += t;
@@ -1605,7 +1632,11 @@ app.get('/api/portal/sales', requireAuth, async (req, res) => {
     const realizedSales = cashTotal + momoTotal + cardTotal;
     const totalRevenue = realizedSales + debtPaymentsTotal;
 
+<<<<<<< HEAD
 
+=======
+    console.log(`[Sales API DEBUG] realized=${realizedSales} debtPayments=${debtPaymentsTotal} totalRevenue=${totalRevenue} creditIssued=${creditTotal}`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
     // Credit Summary: Issued in period - Paid in period
     const netCreditTotal = Math.max(0, creditTotal - debtPaymentsTotal);
@@ -2047,6 +2078,7 @@ app.delete('/api/portal/admin/super-admins/:id', requireAuth, async (req, res) =
 });
 
 // Serve Portal SPA Assets
+<<<<<<< HEAD
 // Desktop app auto-update feed (latest.yml + NSIS installer from scripts/prepare-release.ps1)
 app.use('/updates', express.static(path.join(__dirname, 'updates'), {
   setHeaders(res) {
@@ -2054,6 +2086,8 @@ app.use('/updates', express.static(path.join(__dirname, 'updates'), {
   },
 }));
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 app.use(express.static(path.join(__dirname, 'portal', 'dist')));
 
 // SPA Catch-all (Must be last)

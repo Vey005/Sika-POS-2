@@ -13,8 +13,12 @@ export function registerSettingsHandlers() {
   const ALLOWED_KEYS = new Set([
     'business_name', 'business_address', 'business_phone', 'cashier_name',
     'receipt_footer', 'tin', 'pin', 'currency', 'owner_whatsapp',
+<<<<<<< HEAD
     'notification_provider', 'sms_sender_id', 'theme', 'custom_categories', 'tax_config', 'receipt_config',
     'cashier_nav_visibility',
+=======
+    'notification_provider', 'sms_sender_id', 'theme', 'custom_categories', 'tax_config', 'receipt_config'
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   ]);
 
   ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
@@ -51,8 +55,11 @@ export function registerSettingsHandlers() {
     custom_categories?: string;
     tax_config?: string;
     receipt_config?: string;
+<<<<<<< HEAD
     cashier_nav_visibility?: string;
     expiry_alert_months_default?: string;
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   }) => {
     const setSetting = db.prepare(`
       INSERT INTO settings (key, value) VALUES (?, ?)
@@ -72,8 +79,11 @@ export function registerSettingsHandlers() {
       if (data.custom_categories !== undefined) setSetting.run('custom_categories', data.custom_categories);
       if (data.tax_config !== undefined) setSetting.run('tax_config', data.tax_config);
       if (data.receipt_config !== undefined) setSetting.run('receipt_config', data.receipt_config);
+<<<<<<< HEAD
       if (data.cashier_nav_visibility !== undefined) setSetting.run('cashier_nav_visibility', data.cashier_nav_visibility);
       if (data.expiry_alert_months_default !== undefined) setSetting.run('expiry_alert_months_default', data.expiry_alert_months_default);
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     });
     setAll();
     return { success: true };
@@ -83,7 +93,11 @@ export function registerSettingsHandlers() {
     // Deliberately exclude sms_api_key — sensitive credentials should not be sent to the renderer
     const rows = db.prepare(`
       SELECT key, value FROM settings
+<<<<<<< HEAD
       WHERE key IN ('business_name','business_address','business_phone','cashier_name','receipt_footer','tin','pin','currency','owner_whatsapp','notification_provider','sms_sender_id','custom_categories','tax_config','receipt_config','cashier_nav_visibility','expiry_alert_months_default')
+=======
+      WHERE key IN ('business_name','business_address','business_phone','cashier_name','receipt_footer','tin','pin','currency','owner_whatsapp','notification_provider','sms_sender_id','custom_categories','tax_config','receipt_config')
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     `).all() as Array<{ key: string; value: string }>;
     const result: Record<string, string> = {};
     for (const row of rows) result[row.key] = row.value;

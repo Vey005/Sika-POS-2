@@ -1,8 +1,14 @@
+<<<<<<< HEAD
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../store/auth';
 import { formatCurrency } from '../../utils/format';
 import { filterTransactionsBySearch } from '../../utils/filterTransactions';
 import TransactionSearchBar from '../../components/reports/TransactionSearchBar';
+=======
+import { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '../../store/auth';
+import { formatCurrency } from '../../utils/format';
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from '../Reports/Reports.module.css';
 
 export default function DashboardScreen() {
@@ -10,12 +16,15 @@ export default function DashboardScreen() {
   const [summary, setSummary] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+<<<<<<< HEAD
   const [txSearch, setTxSearch] = useState('');
 
   const filteredTransactions = useMemo(
     () => filterTransactionsBySearch(transactions, txSearch),
     [transactions, txSearch],
   );
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   const loadTodaySales = useCallback(async () => {
     if (!window.sikapos) return;
@@ -92,7 +101,11 @@ export default function DashboardScreen() {
             <div className={styles.summaryCards}>
               <div className={styles.card}>
                 <p className={styles.cardLabel}>Revenue</p>
+<<<<<<< HEAD
                 <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary.total_revenue)}</p>
+=======
+                <p className={styles.cardValue}>GHS {formatCurrency(summary.total_revenue)}</p>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
               <div className={styles.card}>
                 <p className={styles.cardLabel}>Transactions</p>
@@ -100,6 +113,7 @@ export default function DashboardScreen() {
               </div>
               <div className={styles.card}>
                 <p className={styles.cardLabel}>Avg Basket</p>
+<<<<<<< HEAD
                 <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary.avg_basket)}</p>
               </div>
               <div className={styles.card}>
@@ -113,6 +127,21 @@ export default function DashboardScreen() {
               <div className={`${styles.card} ${summary.credit_total > 0 ? styles.cardWarning : ''}`}>
                 <p className={styles.cardLabel}>Credit</p>
                 <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary.credit_total)}</p>
+=======
+                <p className={styles.cardValue}>GHS {formatCurrency(summary.avg_basket)}</p>
+              </div>
+              <div className={styles.card}>
+                <p className={styles.cardLabel}>Cash</p>
+                <p className={styles.cardValue}>GHS {formatCurrency(summary.cash_total)}</p>
+              </div>
+              <div className={styles.card}>
+                <p className={styles.cardLabel}>MoMo</p>
+                <p className={styles.cardValue}>GHS {formatCurrency(summary.momo_total)}</p>
+              </div>
+              <div className={`${styles.card} ${summary.credit_total > 0 ? styles.cardWarning : ''}`}>
+                <p className={styles.cardLabel}>Credit</p>
+                <p className={styles.cardValue}>GHS {formatCurrency(summary.credit_total)}</p>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
             </div>
           </div>
@@ -120,12 +149,15 @@ export default function DashboardScreen() {
 
         <div className={styles.tableSection}>
           <h2 className={styles.sectionTitle}>Transaction History</h2>
+<<<<<<< HEAD
           <TransactionSearchBar
             value={txSearch}
             onChange={setTxSearch}
             shown={filteredTransactions.length}
             total={transactions.length}
           />
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
@@ -145,9 +177,13 @@ export default function DashboardScreen() {
                   <tr><td colSpan={8} className={styles.loadingRow}>Loading...</td></tr>
                 ) : transactions.length === 0 ? (
                   <tr><td colSpan={8} className={styles.emptyRow}>No transactions recorded today</td></tr>
+<<<<<<< HEAD
                 ) : filteredTransactions.length === 0 ? (
                   <tr><td colSpan={8} className={styles.emptyRow}>No transactions match your search</td></tr>
                 ) : filteredTransactions.map(tx => (
+=======
+                ) : transactions.map(tx => (
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   <tr 
                     key={tx.id} 
                     className={`${styles.tableRow} ${tx.status === 'voided' || tx.status === 'reversed' ? styles.voided : ''}`}
@@ -161,7 +197,11 @@ export default function DashboardScreen() {
                     <td>{tx.customer_name || <span className={styles.muted}>Walk-in</span>}</td>
                     <td className={styles.monoCell}>{tx.item_count}</td>
                     <td>{paymentMethodLabel(tx.payment_method)}</td>
+<<<<<<< HEAD
                     <td className={styles.totalCell}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tx.grand_total)}</td>
+=======
+                    <td className={styles.totalCell}>GHS {formatCurrency(tx.grand_total)}</td>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     <td>
                       <span className={`${styles.statusBadge} ${
                         tx.status === 'voided' ? styles.statusVoided : 

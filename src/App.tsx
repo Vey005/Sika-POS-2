@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/auth';
+<<<<<<< HEAD
 import { promptClockOutBeforeExit } from './utils/exitWithAttendancePrompt';
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import { useThemeStore } from './store/theme';
 import AppShell from './components/layout/AppShell';
 import LoginScreen from './screens/Auth/Login';
@@ -13,7 +16,10 @@ import CustomersScreen from './screens/Customers';
 import ReportsScreen from './screens/Reports';
 import SettingsScreen from './screens/Settings';
 import DashboardScreen from './screens/Dashboard';
+<<<<<<< HEAD
 import GlobalDialog from './components/common/GlobalDialog';
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 export default function App() {
   const { isAuthenticated, isActivated, isSetupComplete, setBusinessInfo, setBusinessLogo, setActivated, setSetupComplete } = useAuthStore();
@@ -77,7 +83,10 @@ export default function App() {
             useAuthStore.getState().setReceiptConfig({ ...current, ...saved });
           } catch(e) {}
         }
+<<<<<<< HEAD
         useAuthStore.getState().setCashierNavVisibility(biz.cashier_nav_visibility ?? undefined);
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       } catch (err) {
         console.error('App init failed', err);
       } finally {
@@ -88,6 +97,7 @@ export default function App() {
     initApp();
   }, [setBusinessInfo, setActivated, setSetupComplete]);
 
+<<<<<<< HEAD
   // Quit / title-bar close: prompt clock-out if signed in and still clocked in
   useEffect(() => {
     if (!window.sikapos?.onCloseIntercepted || !window.sikapos.window.confirmClose) return;
@@ -108,6 +118,8 @@ export default function App() {
     return cleanup;
   }, []);
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   if (!loaded) {
     return (
       <div style={{
@@ -130,10 +142,15 @@ export default function App() {
   };
 
   return (
+<<<<<<< HEAD
     <>
       <GlobalDialog />
       <HashRouter>
         <Routes>
+=======
+    <HashRouter>
+      <Routes>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         {/* Step 1: License Activation */}
         <Route
           path="/activate"
@@ -180,6 +197,9 @@ export default function App() {
         <Route path="*" element={<Navigate to={getDefaultRoute()} replace />} />
       </Routes>
     </HashRouter>
+<<<<<<< HEAD
     </>
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   );
 }

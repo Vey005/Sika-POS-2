@@ -1,16 +1,26 @@
 import styles from './ProductGrid.module.css';
 import { getCategoryColor } from '../../screens/POS';
+<<<<<<< HEAD
 import { useAuthStore } from '../../store/auth';
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 interface Props {
   products: Product[];
   loading: boolean;
+<<<<<<< HEAD
   onProductClick: (product: Product, saleUnit?: 'single' | 'pack') => void;
 }
 
 import React from 'react';
 
 export default React.memo(function ProductGrid({ products, loading, onProductClick }: Props) {
+=======
+  onProductClick: (product: Product) => void;
+}
+
+export default function ProductGrid({ products, loading, onProductClick }: Props) {
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   if (loading) {
     return (
       <div className={styles.grid}>
@@ -43,10 +53,17 @@ export default React.memo(function ProductGrid({ products, loading, onProductCli
         const isLow = product.is_inventory === 1 && stock > 0 && stock <= product.low_stock_threshold;
 
         return (
+<<<<<<< HEAD
           <div
             key={product.id}
             className={`${styles.tile} ${isOut ? styles.outOfStock : ''} ${product.image_path ? styles.withImage : ''}`}
             onClick={() => onProductClick(product, 'single')}
+=======
+          <button
+            key={product.id}
+            className={`${styles.tile} ${isOut ? styles.outOfStock : ''} ${product.image_path ? styles.withImage : ''}`}
+            onClick={() => onProductClick(product)}
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             title={isOut ? `Out of stock (${stock})` : product.name}
           >
             {/* Image or category color bar */}
@@ -80,6 +97,7 @@ export default React.memo(function ProductGrid({ products, loading, onProductCli
               {product.size && <p className={styles.productCategory} style={{ color: 'var(--color-gold)', fontWeight: 600 }}>{product.size}</p>}
               <p className={styles.productCategory}>{product.category}</p>
               <p className={styles.productPrice}>
+<<<<<<< HEAD
                 {useAuthStore.getState().receiptConfig.currency} <span>{product.unit_price.toFixed(2)}</span>
               </p>
               {product.pack_size && product.pack_size > 1 && (
@@ -94,8 +112,18 @@ export default React.memo(function ProductGrid({ products, loading, onProductCli
               )}
             </div>
           </div>
+=======
+                GHS <span>{product.unit_price.toFixed(2)}</span>
+              </p>
+            </div>
+          </button>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         );
       })}
     </div>
   );
+<<<<<<< HEAD
 });
+=======
+}
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf

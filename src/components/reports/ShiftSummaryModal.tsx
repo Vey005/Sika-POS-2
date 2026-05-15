@@ -1,9 +1,14 @@
+<<<<<<< HEAD
 import { useState, useEffect, useMemo } from 'react';
 import { formatCurrency } from '../../utils/format';
 import { filterTransactionsBySearch } from '../../utils/filterTransactions';
 import TransactionSearchBar from './TransactionSearchBar';
 import { useAuthStore } from '../../store/auth';
 import { showAlert } from '../../store/dialogStore';
+=======
+import { useState, useEffect } from 'react';
+import { formatCurrency } from '../../utils/format';
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './ShiftSummaryModal.module.css';
 
 interface ShiftLog {
@@ -22,6 +27,7 @@ interface Props {
 
 export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }: Props) {
   const [loading, setLoading] = useState(true);
+<<<<<<< HEAD
   const [isPrinting, setIsPrinting] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
@@ -33,6 +39,10 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
     () => filterTransactionsBySearch(transactions, txSearch),
     [transactions, txSearch],
   );
+=======
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [summary, setSummary] = useState<any>(null);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
   useEffect(() => {
     async function fetchShiftData() {
@@ -53,6 +63,7 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
       }
     }
     fetchShiftData();
+<<<<<<< HEAD
     setTxSearch('');
   }, [log]);
 
@@ -85,6 +96,10 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
     }
   };
 
+=======
+  }, [log]);
+
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const shiftDuration = () => {
     const start = new Date(log.clock_in);
     const end = log.clock_out ? new Date(log.clock_out) : new Date();
@@ -100,6 +115,7 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
         <div className={styles.header}>
           <div>
             <h2>Shift Summary</h2>
+<<<<<<< HEAD
             <div className={styles.shiftMeta}>
               <span>👤 {log.user_name}</span>
               <span>⏱️ {shiftDuration()}</span>
@@ -124,6 +140,14 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
             )}
             <button className={styles.closeBtn} onClick={onClose}>&times;</button>
           </div>
+=======
+            <div className={styles.staffBadge}>
+              👤 {log.user_name} · {shiftDuration()}
+              {!log.clock_out && ' (Still Active)'}
+            </div>
+          </div>
+          <button className={styles.closeBtn} onClick={onClose}>&times;</button>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         </div>
 
         <div className={styles.body}>
@@ -135,7 +159,11 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
               <div className={styles.summaryCards}>
                 <div className={`${styles.card} ${styles.revenueCard}`}>
                   <p className={styles.cardLabel}>Total Revenue</p>
+<<<<<<< HEAD
                   <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary?.total_revenue)}</p>
+=======
+                  <p className={styles.cardValue}>GHS {formatCurrency(summary?.total_revenue)}</p>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                 </div>
                 <div className={styles.card}>
                   <p className={styles.cardLabel}>Transactions</p>
@@ -143,6 +171,7 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
                 </div>
                 <div className={styles.card}>
                   <p className={styles.cardLabel}>Cash</p>
+<<<<<<< HEAD
                   <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary?.cash_total)}</p>
                 </div>
                 {summary?.debt_recovered > 0 && (
@@ -161,16 +190,32 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
                 shown={filteredTransactions.length}
                 total={transactions.length}
               />
+=======
+                  <p className={styles.cardValue}>GHS {formatCurrency(summary?.cash_total)}</p>
+                </div>
+              </div>
+
+              {/* Transaction List */}
+              <h3 className={styles.sectionTitle}>
+                Transactions ({transactions.length})
+              </h3>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
               {transactions.length === 0 ? (
                 <div className={styles.emptyState}>
                   No transactions were made during this shift.
                 </div>
+<<<<<<< HEAD
               ) : filteredTransactions.length === 0 ? (
                 <div className={styles.emptyState}>No transactions match your search.</div>
               ) : (
                 <div className={styles.txList}>
                   {filteredTransactions.map((tx: any) => (
+=======
+              ) : (
+                <div className={styles.txList}>
+                  {transactions.map((tx: any) => (
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                     <div
                       key={tx.id}
                       className={styles.txRow}
@@ -183,11 +228,16 @@ export default function ShiftSummaryModal({ log, onClose, onSelectTransaction }:
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
+<<<<<<< HEAD
                         <div className={styles.txAmount}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tx.grand_total)}</div>
                         <div className={styles.txMethod}>
                           {tx.payment_method}
                           {tx.status === 'debt' ? ' · on credit' : ''}
                         </div>
+=======
+                        <div className={styles.txAmount}>GHS {formatCurrency(tx.grand_total)}</div>
+                        <div className={styles.txMethod}>{tx.payment_method}</div>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                       </div>
                     </div>
                   ))}

@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import { CLOUD_SERVER_URL } from '../../config';
+<<<<<<< HEAD
 import { formatErrorMsg } from '../../utils/errorFormatter';
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './Login.module.css';
 
 export default function ActivationScreen() {
@@ -56,7 +59,11 @@ export default function ActivationScreen() {
       const data = await response.json();
 
       if (!data.success) {
+<<<<<<< HEAD
         setError(formatErrorMsg(data.message, 'Activation failed'));
+=======
+        setError(data.message || 'Activation failed');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         setStatus('');
         setLoading(false);
         return;
@@ -74,6 +81,7 @@ export default function ActivationScreen() {
 
       setActivated(true);
 
+<<<<<<< HEAD
       // If this license key is already associated with a business in the cloud,
       // skip setup and go straight to login.
       const hasBusinessProfile =
@@ -97,6 +105,40 @@ export default function ActivationScreen() {
         await new Promise(r => setTimeout(r, 500));
         navigate('/login', { replace: true });
         return;
+=======
+      // Check if cloud has existing data (returning customer / recovery)
+      setStatus('Checking for existing data...');
+      try {
+        const pullRes = await fetch(`${CLOUD_SERVER_URL}/v1/sync/pull?business_id=${encodeURIComponent(key)}`);
+        const pullData = await pullRes.json();
+
+        if (pullData.success && pullData.data && Object.keys(pullData.data).length > 0) {
+          // ── RECOVERY: Returning customer ──
+          setStatus('Found your data! Restoring everything...');
+          await window.sikapos?.sync?.restore();
+
+          if (data.business_name) setBusinessInfo(data.business_name);
+          if (data.business_logo) setBusinessLogo(data.business_logo);
+
+          // If we restored users, we can go to login. Otherwise setup Step 2.
+          const hasUsers = pullData.data.users && pullData.data.users.length > 0;
+
+          if (hasUsers) {
+            setSetupComplete(true);
+            await window.sikapos?.secureStore.set('setup_complete', 'true');
+            setStatus('✅ All data restored!');
+            await new Promise(r => setTimeout(r, 1500));
+            navigate('/login', { replace: true });
+          } else {
+            setStatus('Profile restored. Please create an admin account.');
+            await new Promise(r => setTimeout(r, 1000));
+            navigate('/setup', { replace: true });
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Sync pull failed during activation:', err);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       }
 
       // ── FIRST TIME: New customer → go to business setup ──
@@ -105,13 +147,18 @@ export default function ActivationScreen() {
       navigate('/setup', { replace: true });
 
     } catch (err) {
+<<<<<<< HEAD
       setError(formatErrorMsg(err, 'Could not connect to activation server'));
+=======
+      setError('Could not connect to activation server');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       setStatus('');
     } finally {
       setLoading(false);
     }
   };
 
+<<<<<<< HEAD
   const handleExit = () => {
     if (window.sikapos?.window?.confirmClose) {
       window.sikapos.window.confirmClose();
@@ -129,6 +176,10 @@ export default function ActivationScreen() {
         </svg>
       </button>
       
+=======
+  return (
+    <div className={styles.container}>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       <div className={styles.loginCard} style={{ width: '400px' }}>
         <div className={styles.header}>
           <div className={styles.logoRing}>
@@ -173,8 +224,12 @@ export default function ActivationScreen() {
         </form>
 
         <div className={styles.footer} style={{ marginTop: '24px' }}>
+<<<<<<< HEAD
           <p style={{ margin: '0 0 8px 0' }}>Don't have a key? Contact DanniTech Solution</p>
           <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-gold)' }}>0548470413 / 0599008533</p>
+=======
+          <p>Don't have a key? Contact DanniTech Solution</p>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         </div>
       </div>
     </div>

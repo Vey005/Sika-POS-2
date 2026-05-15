@@ -51,9 +51,15 @@ interface CartState {
   itemCount: () => number;
 
   // Actions
+<<<<<<< HEAD
   addItem: (product: Product, saleUnit?: 'single' | 'pack') => void;
   removeItem: (cartKey: string) => void;
   setQuantity: (cartKey: string, qty: number) => void;
+=======
+  addItem: (product: Product) => void;
+  removeItem: (productId: number) => void;
+  setQuantity: (productId: number, qty: number) => void;
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   applyDiscount: (amount: number, type: 'percentage' | 'fixed') => void;
   setCustomer: (id: number, name: string, creditBalance: number) => void;
   clearCustomer: () => void;
@@ -110,6 +116,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   itemCount: () => get().items.reduce((s, i) => s + i.quantity, 0),
 
+<<<<<<< HEAD
   addItem: (product: Product, saleUnit: 'single' | 'pack' = 'single') => {
     set(state => {
       const multiplier = saleUnit === 'pack' ? Math.max(1, Number(product.pack_size || 1)) : 1;
@@ -122,23 +129,39 @@ export const useCartStore = create<CartState>((set, get) => ({
         return {
           items: state.items.map(i =>
             i.cart_key === cartKey
+=======
+  addItem: (product: Product) => {
+    set(state => {
+      const existing = state.items.find(i => i.product_id === product.id);
+      if (existing) {
+        return {
+          items: state.items.map(i =>
+            i.product_id === product.id
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               ? { ...i, quantity: i.quantity + 1 }
               : i
           ),
         };
       }
       const newItem: CartItem = {
+<<<<<<< HEAD
         cart_key: cartKey,
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         product_id: product.id,
         product_name: product.name,
         product_barcode: product.barcode,
         product_size: product.size,
         category: product.category,
         quantity: 1,
+<<<<<<< HEAD
         sale_unit: saleUnit,
         stock_unit: product.stock_unit || 'single',
         unit_multiplier: multiplier,
         unit_price: unitPrice,
+=======
+        unit_price: product.unit_price,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         cost_price: product.cost_price,
         stock_qty: product.stock_qty,
         is_inventory: product.is_inventory,
@@ -148,6 +171,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
   },
 
+<<<<<<< HEAD
   removeItem: (cartKey: string) => {
     set(state => ({ items: state.items.filter(i => i.cart_key !== cartKey) }));
   },
@@ -155,11 +179,24 @@ export const useCartStore = create<CartState>((set, get) => ({
   setQuantity: (cartKey: string, qty: number) => {
     if (qty <= 0) {
       get().removeItem(cartKey);
+=======
+  removeItem: (productId: number) => {
+    set(state => ({ items: state.items.filter(i => i.product_id !== productId) }));
+  },
+
+  setQuantity: (productId: number, qty: number) => {
+    if (qty <= 0) {
+      get().removeItem(productId);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       return;
     }
     set(state => ({
       items: state.items.map(i =>
+<<<<<<< HEAD
         i.cart_key === cartKey ? { ...i, quantity: qty } : i
+=======
+        i.product_id === productId ? { ...i, quantity: qty } : i
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       ),
     }));
   },
@@ -192,6 +229,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   clearDiscount: () => set({ discountAmount: 0 }),
   
   loadCart: (data: any) => {
+<<<<<<< HEAD
     const normalizedItems: CartItem[] = (data.items || []).map((i: any) => {
       const saleUnit = (i.sale_unit || i.saleUnit || 'single') as 'single' | 'pack';
       const key = i.cart_key || `${i.product_id}:${saleUnit}`;
@@ -204,6 +242,10 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
     set({
       items: normalizedItems,
+=======
+    set({
+      items: data.items || [],
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       customerId: data.customerId,
       customerName: data.customerName,
       customerCreditBalance: data.customerCreditBalance,

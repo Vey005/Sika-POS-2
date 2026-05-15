@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import styles from './TitleBar.module.css';
 import { useAuthStore } from '../../store/auth';
 import { useThemeStore } from '../../store/theme';
+<<<<<<< HEAD
 import { promptClockOutBeforeExit } from '../../utils/exitWithAttendancePrompt';
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 export default function TitleBar() {
   const { businessName, user, logout } = useAuthStore();
@@ -35,6 +38,7 @@ export default function TitleBar() {
     weekday: 'short', month: 'short', day: 'numeric',
   });
 
+<<<<<<< HEAD
   const handleLogout = async () => {
     if (!user) {
       logout();
@@ -44,10 +48,14 @@ export default function TitleBar() {
     const result = await promptClockOutBeforeExit(user.id);
     if (result === 'cancel') return;
     setShowDropdown(false);
+=======
+  const handleLogout = () => {
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     logout();
     navigate('/');
   };
 
+<<<<<<< HEAD
   const handleSwitchUser = async () => {
     if (!user) {
       logout();
@@ -57,6 +65,9 @@ export default function TitleBar() {
     const result = await promptClockOutBeforeExit(user.id);
     if (result === 'cancel') return;
     setShowDropdown(false);
+=======
+  const handleSwitchUser = () => {
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     logout();
     navigate('/');
   };

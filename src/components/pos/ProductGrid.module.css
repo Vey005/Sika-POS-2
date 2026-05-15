@@ -1,7 +1,10 @@
 .grid {
   flex: 1;
   overflow-y: auto;
+<<<<<<< HEAD
   -webkit-overflow-scrolling: touch;
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--space-3);
@@ -160,6 +163,7 @@
   color: var(--color-gold);
 }
 
+<<<<<<< HEAD
 .packActions {
   display: flex;
   gap: 6px;
@@ -182,6 +186,8 @@
   color: var(--color-gold);
 }
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 .empty {
   flex: 1;
   display: flex;

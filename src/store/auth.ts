@@ -1,9 +1,12 @@
 import { create } from 'zustand';
+<<<<<<< HEAD
 import {
   mergeCashierNavVisibility,
   type CashierNavTabId,
   DEFAULT_CASHIER_NAV_VISIBILITY,
 } from '../constants/cashierNav';
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 export interface User {
   id: number;
@@ -42,8 +45,11 @@ interface AuthState {
   receiptFooter: string;
   taxConfig: TaxConfig[];
   receiptConfig: ReceiptConfig;
+<<<<<<< HEAD
   /** Effective visibility for sidebar tabs when logged in as cashier (POS always true). */
   cashierNavVisibility: Record<CashierNavTabId, boolean>;
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   login: (user: User) => void;
   logout: () => void;
   setBusinessInfo: (businessName: string) => void;
@@ -51,7 +57,10 @@ interface AuthState {
   setReceiptFooter: (footer: string) => void;
   setTaxConfig: (config: TaxConfig[]) => void;
   setReceiptConfig: (config: Partial<ReceiptConfig>) => void;
+<<<<<<< HEAD
   setCashierNavVisibility: (jsonOrMerged: string | Record<CashierNavTabId, boolean> | null | undefined) => void;
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   setActivated: (activated: boolean) => void;
   setSetupComplete: (complete: boolean) => void;
 }
@@ -70,8 +79,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     { id: 'getfund', name: 'GETFund', rate: 2.5 },
     { id: 'covid', name: 'COVID Levy', rate: 1.0 }
   ],
+<<<<<<< HEAD
   cashierNavVisibility: { ...DEFAULT_CASHIER_NAV_VISIBILITY },
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   receiptConfig: {
     showLogo: true,
     showCashier: true,
@@ -84,7 +96,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     showPhone: true,
     showTIN: true,
     showBarcode: true,
+<<<<<<< HEAD
     currency: 'GH₵',
+=======
+    currency: 'GHS',
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   },
 
   login: (user: User) => {
@@ -108,6 +124,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setReceiptConfig: (receiptConfig: Partial<ReceiptConfig>) =>
     set((state) => ({ receiptConfig: { ...state.receiptConfig, ...receiptConfig } })),
 
+<<<<<<< HEAD
   setCashierNavVisibility: (input) =>
     set(() => ({
       cashierNavVisibility:
@@ -116,6 +133,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           : { ...mergeCashierNavVisibility(undefined), ...input, pos: true },
     })),
 
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   setActivated: (isActivated: boolean) =>
     set({ isActivated }),
 

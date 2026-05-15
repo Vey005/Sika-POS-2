@@ -1,13 +1,21 @@
+<<<<<<< HEAD
 import { useState, useEffect, useCallback, useMemo } from 'react';
+=======
+import { useState, useEffect, useCallback } from 'react';
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import { useAuthStore } from '../../store/auth';
 import ReportPreviewModal from '../../components/reports/ReportPreviewModal';
 import TransactionDetailModal from '../../components/reports/TransactionDetailModal';
 import ShiftSummaryModal from '../../components/reports/ShiftSummaryModal';
+<<<<<<< HEAD
 import TransactionSearchBar from '../../components/reports/TransactionSearchBar';
 import { filterTransactionsBySearch } from '../../utils/filterTransactions';
 import { formatCurrency, formatNumber } from '../../utils/format';
 import { showAlert, showConfirm, showPrompt } from '../../store/dialogStore';
 import { formatErrorMsg } from '../../utils/errorFormatter';
+=======
+import { formatCurrency, formatNumber } from '../../utils/format';
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 import styles from './Reports.module.css';
 
 export default function ReportsScreen() {
@@ -24,6 +32,7 @@ export default function ReportsScreen() {
   const [isPrinting, setIsPrinting] = useState(false);
   const [previewReports, setPreviewReports] = useState<any[] | null>(null);
   const [selectedShiftLog, setSelectedShiftLog] = useState<any | null>(null);
+<<<<<<< HEAD
   const [txSearch, setTxSearch] = useState('');
   const { user, businessName } = useAuthStore();
 
@@ -32,6 +41,10 @@ export default function ReportsScreen() {
     [transactions, txSearch],
   );
 
+=======
+  const { user, businessName } = useAuthStore();
+
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   const today = new Date().toISOString().slice(0, 10);
 
   const load = useCallback(async () => {
@@ -65,12 +78,17 @@ export default function ReportsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+<<<<<<< HEAD
   useEffect(() => {
     setTxSearch('');
   }, [dateRange.from, dateRange.to, activeTab]);
 
   const handleVoid = async (id: number) => {
     const reason = await showPrompt('Reason for voiding this transaction?');
+=======
+  const handleVoid = async (id: number) => {
+    const reason = prompt('Reason for voiding this transaction?');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     if (!reason) return;
     setVoidingId(id);
     try {
@@ -78,24 +96,39 @@ export default function ReportsScreen() {
       if (result.success) {
         await load();
       } else {
+<<<<<<< HEAD
         await showAlert(formatErrorMsg(result.message, 'Failed to void transaction.'));
       }
     } catch (err: any) {
       await showAlert(formatErrorMsg(err, 'An error occurred while voiding.'));
+=======
+        alert(`Error: ${result.message}`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setVoidingId(null);
     }
   };
 
+<<<<<<< HEAD
   const handleReverse = async (id: number) => {
     if (!window.sikapos) return;
     
     const ok = await showConfirm('Are you sure you want to reverse this sale? All items will be returned to stock.');
+=======
+  const handleReverse = (id: number) => {
+    if (!window.sikapos) return;
+    
+    const ok = confirm('Are you sure you want to reverse this sale? All items will be returned to stock.');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     if (!ok) return;
 
     const reason = 'Administrative Reversal';
     setVoidingId(id);
     window.sikapos.sales.reverse(id, reason)
+<<<<<<< HEAD
       .then(async (result: any) => {
         if (result && result.success) {
           load();
@@ -105,6 +138,17 @@ export default function ReportsScreen() {
       })
       .catch(async (err: any) => {
         await showAlert(formatErrorMsg(err, 'An error occurred during reversal.'));
+=======
+      .then((result: any) => {
+        if (result && result.success) {
+          load();
+        } else {
+          alert('Error: ' + (result?.message || 'Unknown error'));
+        }
+      })
+      .catch((err: any) => {
+        alert('Error: ' + err.message);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
       })
       .finally(() => {
         setVoidingId(null);
@@ -138,6 +182,7 @@ export default function ReportsScreen() {
             businessName,
             businessLogo: useAuthStore.getState().businessLogo,
             date,
+<<<<<<< HEAD
             summary: {
               ...data.summary,
               debt_recovered: data.summary.debt_recovered || 0
@@ -145,19 +190,32 @@ export default function ReportsScreen() {
             transactions: data.transactions,
             itemSummary: data.itemSummary,
             currency: useAuthStore.getState().receiptConfig.currency,
+=======
+            summary: data.summary,
+            transactions: data.transactions,
+            itemSummary: data.itemSummary,
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
             config: useAuthStore.getState().receiptConfig
           });
         }
       }
       
       if (reportsToPreview.length === 0) {
+<<<<<<< HEAD
         await showAlert('No transactions found for the selected period.');
+=======
+        alert('No transactions found for the selected period.');
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
         return;
       }
       
       setPreviewReports(reportsToPreview);
     } catch (err: any) {
+<<<<<<< HEAD
       await showAlert(`Failed to load report data: ${formatErrorMsg(err)}`);
+=======
+      alert('Failed to load report data: ' + err.message);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setLoading(false);
     }
@@ -172,9 +230,15 @@ export default function ReportsScreen() {
         await window.sikapos.printer.printReport(report);
       }
       setPreviewReports(null);
+<<<<<<< HEAD
       await showAlert('Reports sent to printer.');
     } catch (err: any) {
       await showAlert(`Failed to print: ${formatErrorMsg(err)}`);
+=======
+      alert('Reports sent to printer.');
+    } catch (err: any) {
+      alert('Failed to print: ' + err.message);
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
     } finally {
       setIsPrinting(false);
     }
@@ -229,7 +293,11 @@ export default function ReportsScreen() {
                 <div className={styles.summaryCards}>
                   <div className={styles.card}>
                     <p className={styles.cardLabel}>Revenue</p>
+<<<<<<< HEAD
                     <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary.total_revenue)}</p>
+=======
+                    <p className={styles.cardValue}>GHS {formatCurrency(summary.total_revenue)}</p>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   </div>
                   <div className={styles.card}>
                     <p className={styles.cardLabel}>Transactions</p>
@@ -237,6 +305,7 @@ export default function ReportsScreen() {
                   </div>
                   <div className={styles.card}>
                     <p className={styles.cardLabel}>Avg Basket</p>
+<<<<<<< HEAD
                     <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary.avg_basket)}</p>
                   </div>
                   <div className={styles.card}>
@@ -250,6 +319,21 @@ export default function ReportsScreen() {
                   <div className={`${styles.card} ${summary.credit_total > 0 ? styles.cardWarning : ''}`}>
                     <p className={styles.cardLabel}>Credit</p>
                     <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(summary.credit_total)}</p>
+=======
+                    <p className={styles.cardValue}>GHS {formatCurrency(summary.avg_basket)}</p>
+                  </div>
+                  <div className={styles.card}>
+                    <p className={styles.cardLabel}>Cash</p>
+                    <p className={styles.cardValue}>GHS {formatCurrency(summary.cash_total)}</p>
+                  </div>
+                  <div className={styles.card}>
+                    <p className={styles.cardLabel}>MoMo</p>
+                    <p className={styles.cardValue}>GHS {formatCurrency(summary.momo_total)}</p>
+                  </div>
+                  <div className={`${styles.card} ${summary.credit_total > 0 ? styles.cardWarning : ''}`}>
+                    <p className={styles.cardLabel}>Credit</p>
+                    <p className={styles.cardValue}>GHS {formatCurrency(summary.credit_total)}</p>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                   </div>
                 </div>
               </div>
@@ -257,12 +341,15 @@ export default function ReportsScreen() {
 
             <div className={styles.tableSection}>
               <h2 className={styles.sectionTitle}>Transaction History</h2>
+<<<<<<< HEAD
               <TransactionSearchBar
                 value={txSearch}
                 onChange={setTxSearch}
                 shown={filteredTransactions.length}
                 total={transactions.length}
               />
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
@@ -283,9 +370,13 @@ export default function ReportsScreen() {
                       <tr><td colSpan={9} className={styles.loadingRow}>Loading...</td></tr>
                     ) : transactions.length === 0 ? (
                       <tr><td colSpan={9} className={styles.emptyRow}>No transactions found for this period</td></tr>
+<<<<<<< HEAD
                     ) : filteredTransactions.length === 0 ? (
                       <tr><td colSpan={9} className={styles.emptyRow}>No transactions match your search</td></tr>
                     ) : filteredTransactions.map(tx => (
+=======
+                    ) : transactions.map(tx => (
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                       <tr 
                         key={tx.id} 
                         className={`${styles.tableRow} ${tx.status === 'voided' || tx.status === 'reversed' ? styles.voided : ''}`}
@@ -300,7 +391,11 @@ export default function ReportsScreen() {
                         <td>{tx.customer_name || <span className={styles.muted}>Walk-in</span>}</td>
                         <td className={styles.monoCell}>{tx.item_count}</td>
                         <td>{paymentMethodLabel(tx.payment_method)}</td>
+<<<<<<< HEAD
                         <td className={styles.totalCell}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tx.grand_total)}</td>
+=======
+                        <td className={styles.totalCell}>GHS {formatCurrency(tx.grand_total)}</td>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                         <td>
                           <span className={`${styles.statusBadge} ${
                             tx.status === 'voided' ? styles.statusVoided : 
@@ -321,7 +416,11 @@ export default function ReportsScreen() {
                                 {voidingId === tx.id ? '...' : 'Void'}
                               </button>
                               {user?.role === 'admin' && (
+<<<<<<< HEAD
                                 <button className={styles.reverseBtn} onClick={(e) => { e.stopPropagation(); handleReverse(tx.id); }} disabled={voidingId === tx.id}>
+=======
+                                <button className={styles.reverseBtn} onClick={() => handleReverse(tx.id)} disabled={voidingId === tx.id}>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                                   Reverse
                                 </button>
                               )}
@@ -350,11 +449,19 @@ export default function ReportsScreen() {
               </div>
               <div className={`${styles.card} ${styles.stockCard}`}>
                 <p className={styles.cardLabel}>Stock Value (Selling)</p>
+<<<<<<< HEAD
                 <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(invSummary?.total_value_selling)}</p>
               </div>
               <div className={`${styles.card} ${styles.stockValueCard}`}>
                 <p className={styles.cardLabel}>Stock Value (Cost)</p>
                 <p className={styles.cardValue}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(invSummary?.total_value_cost)}</p>
+=======
+                <p className={styles.cardValue}>GHS {formatCurrency(invSummary?.total_value_selling)}</p>
+              </div>
+              <div className={`${styles.card} ${styles.stockValueCard}`}>
+                <p className={styles.cardLabel}>Stock Value (Cost)</p>
+                <p className={styles.cardValue}>GHS {formatCurrency(invSummary?.total_value_cost)}</p>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
               </div>
             </div>
 
@@ -380,7 +487,11 @@ export default function ReportsScreen() {
                         <td style={{ fontWeight: '600' }}>{cat.category}</td>
                         <td className={styles.monoCell}>{cat.item_count}</td>
                         <td className={styles.monoCell}>{cat.total_stock?.toLocaleString() || 0}</td>
+<<<<<<< HEAD
                         <td className={styles.totalCell}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(cat.total_value)}</td>
+=======
+                        <td className={styles.totalCell}>GHS {formatCurrency(cat.total_value)}</td>
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
                       </tr>
                     ))}
                   </tbody>

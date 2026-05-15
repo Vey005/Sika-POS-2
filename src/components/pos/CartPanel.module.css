@@ -159,7 +159,10 @@
 .items {
   flex: 1;
   overflow-y: auto;
+<<<<<<< HEAD
   -webkit-overflow-scrolling: touch;
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
   padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
@@ -535,6 +538,7 @@
   color: var(--color-text-muted);
   margin-top: var(--space-2);
   letter-spacing: 0.3px;
+<<<<<<< HEAD
 }
 
 /* ============================================================
@@ -598,4 +602,6 @@
     height: 48px;
     flex: 0 0 80px;
   }
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 }

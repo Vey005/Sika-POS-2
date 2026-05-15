@@ -130,7 +130,11 @@
   margin-bottom: var(--space-3);
 }
 
+<<<<<<< HEAD
 .tableWrap { flex: 1; overflow-y: auto; overflow-x: auto; }
+=======
+.tableWrap { flex: 1; overflow-y: auto; }
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
 
 .table { width: 100%; border-collapse: collapse; font-size: 12px; }
 
@@ -327,6 +331,7 @@
   cursor: not-allowed;
   transform: none;
 }
+<<<<<<< HEAD
 
 /* ============================================================
    Responsive Design
@@ -359,3 +364,5 @@
     padding: var(--space-4);
   }
 }
+=======
+>>>>>>> 3f9ceb5465a3e53b5e5300921300cc3a0983f1cf
