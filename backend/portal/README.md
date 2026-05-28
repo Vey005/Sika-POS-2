@@ -71,3 +71,8 @@ export default defineConfig([
   },
 ])
 ```
+
+## Deployment
+
+The portal is deployed automatically to GitHub Pages via GitHub Actions when pushing to the `main` branch with changes inside `backend/portal/`.
+The deployment is configured to serve from the custom CNAME `portal.sikapos.com`.
