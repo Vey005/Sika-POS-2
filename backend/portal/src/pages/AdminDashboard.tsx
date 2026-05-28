@@ -31,6 +31,7 @@ export default function AdminDashboard() {
   // Product Analytics States
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
 
   const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
 
@@ -123,12 +124,21 @@ export default function AdminDashboard() {
 
   const fetchProductAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
+    setAnalyticsError(null);
     try {
       const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ADMIN_PRODUCT_ANALYTICS), authHeaders);
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server did not return JSON. The backend might still be deploying.');
+      }
       const data = await res.json();
       setAnalyticsData(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setAnalyticsError(err.message || 'Failed to fetch product analytics');
     } finally {
       setAnalyticsLoading(false);
     }
@@ -1075,6 +1085,18 @@ export default function AdminDashboard() {
                   {analyticsLoading ? 'Loading...' : 'Refresh Analytics'}
                 </button>
               </div>
+
+              {analyticsError && (
+                <div style={{
+                  padding: '12px 18px', borderRadius: '12px',
+                  background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.25)',
+                  color: '#ef4444',
+                  fontSize: '14px', fontWeight: 500
+                }}>
+                  {analyticsError}
+                </div>
+              )}
 
               {analyticsLoading && !analyticsData ? (
                 <div style={{ padding: '80px 24px', textAlign: 'center' }}>
