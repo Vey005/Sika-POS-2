@@ -1957,6 +1957,128 @@ app.post('/api/portal/admin/purge-duplicates', requireAuth, async (req, res) => 
   }
 });
 
+// Admin: Get Product Analytics across all users
+app.get('/api/portal/admin/product-analytics', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+
+  if (global.DB_OFFLINE) {
+    return res.json({
+      summary: {
+        totalProducts: 450,
+        totalBusinesses: 12,
+        avgProductsPerBusiness: 37.5
+      },
+      topSoldProducts: [
+        { product_name: 'Coca Cola 500ml', total_qty_sold: 1200, total_sales_value: 6000.00, active_stores: 8 },
+        { product_name: 'Gari (1kg)', total_qty_sold: 850, total_sales_value: 4250.00, active_stores: 5 },
+        { product_name: 'Paracetamol 500mg', total_qty_sold: 720, total_sales_value: 1440.00, active_stores: 4 },
+        { product_name: 'Peak Milk Can', total_qty_sold: 500, total_sales_value: 3500.00, active_stores: 6 },
+        { product_name: 'Sardine Key Soap', total_qty_sold: 450, total_sales_value: 1800.00, active_stores: 3 }
+      ],
+      categories: [
+        { category: 'Beverages', total_products: 150, total_businesses: 9 },
+        { category: 'Foodstuff', total_products: 120, total_businesses: 8 },
+        { category: 'Pharmacy', total_products: 80, total_businesses: 4 },
+        { category: 'Provisions', total_products: 100, total_businesses: 7 }
+      ],
+      recentProducts: [
+        { product_name: 'Maltina Can', category: 'Beverages', unit_price: 7.50, updated_at: new Date().toISOString(), business_name: 'Shop A' },
+        { product_name: 'Indomie Instant Noodles', category: 'Food', unit_price: 3.50, updated_at: new Date(Date.now() - 3600000).toISOString(), business_name: 'Shop B' }
+      ],
+      businessBreakdown: [
+        { business_name: 'Shop A', total_products: 120, total_stock_qty: 1500, total_stock_value: 9500.00 },
+        { business_name: 'Shop B', total_products: 85, total_stock_qty: 920, total_stock_value: 5400.00 },
+        { business_name: 'Pharmacy C', total_products: 65, total_stock_qty: 480, total_stock_value: 2300.00 }
+      ]
+    });
+  }
+
+  try {
+    const [summaryRes, topSoldRes, categoriesRes, recentRes, businessRes] = await Promise.all([
+      pool.query(`
+        SELECT 
+          COUNT(*)::int as total_products, 
+          COUNT(DISTINCT business_id)::int as total_businesses
+        FROM products
+        WHERE is_active = TRUE
+      `),
+      pool.query(`
+        SELECT 
+          ti.product_name,
+          SUM(ti.quantity)::int as total_qty_sold,
+          SUM(ti.line_total)::double precision as total_sales_value,
+          COUNT(DISTINCT ti.business_id)::int as active_stores
+        FROM transaction_items ti
+        JOIN transactions t ON ti.transaction_id = t.id
+        WHERE t.status NOT IN ('voided', 'reversed')
+        GROUP BY ti.product_name
+        ORDER BY total_qty_sold DESC
+        LIMIT 15
+      `),
+      pool.query(`
+        SELECT 
+          COALESCE(category, 'General') as category, 
+          COUNT(*)::int as total_products,
+          COUNT(DISTINCT business_id)::int as total_businesses
+        FROM products
+        WHERE is_active = TRUE
+        GROUP BY COALESCE(category, 'General')
+        ORDER BY total_products DESC
+        LIMIT 10
+      `),
+      pool.query(`
+        SELECT 
+          p.name as product_name, 
+          p.category, 
+          p.unit_price::double precision as unit_price, 
+          p.updated_at,
+          COALESCE(l.business_name, p.business_id) as business_name
+        FROM products p
+        LEFT JOIN licenses l ON p.business_id = l.license_key
+        ORDER BY p.updated_at DESC NULLS LAST
+        LIMIT 15
+      `),
+      pool.query(`
+        SELECT 
+          COALESCE(l.business_name, p.business_id) as business_name,
+          COUNT(*)::int as total_products,
+          SUM(p.stock_qty)::int as total_stock_qty,
+          SUM(p.stock_qty * p.unit_price)::double precision as total_stock_value
+        FROM products p
+        LEFT JOIN licenses l ON p.business_id = l.license_key
+        WHERE p.is_active = TRUE
+        GROUP BY l.business_name, p.business_id
+        ORDER BY total_products DESC
+        LIMIT 10
+      `)
+    ]);
+
+    const totalProducts = summaryRes.rows[0]?.total_products || 0;
+    const totalBusinesses = summaryRes.rows[0]?.total_businesses || 0;
+
+    res.json({
+      summary: {
+        totalProducts,
+        totalBusinesses,
+        avgProductsPerBusiness: totalBusinesses > 0 ? parseFloat((totalProducts / totalBusinesses).toFixed(1)) : 0
+      },
+      topSoldProducts: topSoldRes.rows,
+      categories: categoriesRes.rows,
+      recentProducts: recentRes.rows.map(p => ({
+        ...p,
+        updated_at: p.updated_at ? new Date(p.updated_at).toISOString() : new Date().toISOString()
+      })),
+      businessBreakdown: businessRes.rows.map(b => ({
+        ...b,
+        total_stock_value: parseFloat((b.total_stock_value || 0).toFixed(2))
+      }))
+    });
+  } catch (err) {
+    console.error('[Admin Product Analytics Error]:', err.message);
+    res.status(500).json({ error: 'Failed to fetch product analytics' });
+  }
+});
+
 // Helper to parse date-only string (YYYY-MM-DD) to Date object in local timezone
 function parseDateOnly(dateStr) {
   if (!dateStr) return new Date();

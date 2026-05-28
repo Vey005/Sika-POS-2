@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/auth';
 import { getApiUrl, API_CONFIG } from '../config/api';
-import { LogOut, Key, Search, Activity, MonitorSmartphone, Calendar, PlusCircle, Trash2, UploadCloud, Download, FileText, Shield, Users, Info, Cpu } from 'lucide-react';
+import { LogOut, Key, Search, Activity, MonitorSmartphone, Calendar, PlusCircle, Trash2, UploadCloud, Download, FileText, Shield, Users, Info, Cpu, BarChart3, TrendingUp, Package } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { logout, token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'licenses' | 'admins' | 'updates'>('licenses');
+  const [activeTab, setActiveTab] = useState<'licenses' | 'admins' | 'updates' | 'analytics'>('licenses');
   const [licenses, setLicenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -27,6 +27,10 @@ export default function AdminDashboard() {
   const [releases, setReleases] = useState<any[]>([]);
   const [releasesLoading, setReleasesLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  // Product Analytics States
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
 
@@ -116,6 +120,25 @@ export default function AdminDashboard() {
     fetchAdmins();
     fetchReleases();
   }, []);
+
+  const fetchProductAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ADMIN_PRODUCT_ANALYTICS), authHeaders);
+      const data = await res.json();
+      setAnalyticsData(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      fetchProductAnalytics();
+    }
+  }, [activeTab, fetchProductAnalytics]);
 
   const handleGenerate = async () => {
     if (!confirm('Generate a new license key?')) return;
@@ -341,6 +364,7 @@ export default function AdminDashboard() {
             { id: 'licenses', label: 'License Keys', icon: Key },
             { id: 'admins', label: 'Super Admins', icon: Users },
             { id: 'updates', label: 'App Updates', icon: UploadCloud },
+            { id: 'analytics', label: 'Product Analytics', icon: BarChart3 },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -1030,14 +1054,250 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* Product Analytics Tab */}
+          {activeTab === 'analytics' && (
+            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Refresh header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <BarChart3 size={20} style={{ color: 'var(--primary)' }} />
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Product Analytics</h3>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={fetchProductAnalytics}
+                  disabled={analyticsLoading}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 12px', borderRadius: '8px', fontSize: '13px' }}
+                >
+                  <Activity size={14} className={analyticsLoading ? 'license-pulse' : ''} />
+                  {analyticsLoading ? 'Loading...' : 'Refresh Analytics'}
+                </button>
+              </div>
+
+              {analyticsLoading && !analyticsData ? (
+                <div style={{ padding: '80px 24px', textAlign: 'center' }}>
+                  <div className="license-spinner" />
+                  <p style={{ color: 'var(--text-muted)', marginTop: '16px', fontSize: '14px' }}>Compiling product analytics across all stores...</p>
+                </div>
+              ) : !analyticsData ? (
+                <div style={{ padding: '60px 24px', textAlign: 'center', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: '14px' }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13.5px' }}>No analytics compilation data found. Click Refresh to query database.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Stat Cards */}
+                  <div className="license-stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                    <div className="license-stat-card">
+                      <div className="license-stat-icon" style={{ background: 'linear-gradient(135deg, rgba(212,160,23,0.2), rgba(212,160,23,0.05))' }}>
+                        <Package size={22} style={{ color: 'var(--primary)' }} />
+                      </div>
+                      <div>
+                        <p className="license-stat-value">{analyticsData.summary?.totalProducts || 0}</p>
+                        <p className="license-stat-label">Total Synced Products</p>
+                      </div>
+                    </div>
+
+                    <div className="license-stat-card">
+                      <div className="license-stat-icon" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(99,102,241,0.05))' }}>
+                        <Shield size={22} style={{ color: '#818cf8' }} />
+                      </div>
+                      <div>
+                        <p className="license-stat-value">{analyticsData.summary?.totalBusinesses || 0}</p>
+                        <p className="license-stat-label">Stores Syncing Inventory</p>
+                      </div>
+                    </div>
+
+                    <div className="license-stat-card">
+                      <div className="license-stat-icon" style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.05))' }}>
+                        <TrendingUp size={22} style={{ color: '#22c55e' }} />
+                      </div>
+                      <div>
+                        <p className="license-stat-value">{analyticsData.summary?.avgProductsPerBusiness || 0}</p>
+                        <p className="license-stat-label">Avg Products per Store</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Two Column Grid for Desktop, Single Column for Mobile */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                    
+                    {/* Top Selling Products */}
+                    <div className="glass-panel" style={{ overflow: 'hidden', height: 'fit-content' }}>
+                      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <TrendingUp size={16} style={{ color: 'var(--primary)' }} />
+                        <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Top Selling Products (Global)</h4>
+                      </div>
+                      
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.01)' }}>
+                              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Product Name</th>
+                              <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Stores</th>
+                              <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Qty Sold</th>
+                              <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'right' }}>Total Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(analyticsData.topSoldProducts || []).map((p: any, idx: number) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-main)' }}>
+                                  <span style={{ color: 'var(--text-muted)', marginRight: '8px', fontSize: '11px' }}>#{idx+1}</span>
+                                  {p.product_name}
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>{p.active_stores}</td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>{p.total_qty_sold}</td>
+                                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                                  ₵{(p.total_sales_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                            {(analyticsData.topSoldProducts || []).length === 0 && (
+                              <tr>
+                                <td colSpan={4} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>No sales transactions synced yet.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Popular Product Categories */}
+                    <div className="glass-panel" style={{ overflow: 'hidden', height: 'fit-content' }}>
+                      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Package size={16} style={{ color: 'var(--primary)' }} />
+                        <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Top Categories across Stores</h4>
+                      </div>
+
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.01)' }}>
+                              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Category</th>
+                              <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Total Products</th>
+                              <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Active Stores</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(analyticsData.categories || []).map((cat: any, idx: number) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-main)' }}>{cat.category}</td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--primary)', fontWeight: 700 }}>{cat.total_products}</td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>{cat.total_businesses}</td>
+                              </tr>
+                            ))}
+                            {(analyticsData.categories || []).length === 0 && (
+                              <tr>
+                                <td colSpan={3} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>No categories found.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Business Stock & Inventory Breakdown */}
+                  <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                    <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Shield size={16} style={{ color: 'var(--primary)' }} />
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Inventory Breakdown by Store</h4>
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.01)' }}>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Store / License Name</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600, textAlign: 'center' }}>Products Synced</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600, textAlign: 'center' }}>Total Stock Qty</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600, textAlign: 'right' }}>Total Inventory Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(analyticsData.businessBreakdown || []).map((biz: any, idx: number) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              <td style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-main)' }}>
+                                {biz.business_name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 400 }}>Unnamed Store</span>}
+                              </td>
+                              <td style={{ padding: '12px 20px', textAlign: 'center', color: 'var(--primary)', fontWeight: 700 }}>{biz.total_products}</td>
+                              <td style={{ padding: '12px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>{biz.total_stock_qty?.toLocaleString() || 0}</td>
+                              <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                                ₵{(biz.total_stock_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          ))}
+                          {(analyticsData.businessBreakdown || []).length === 0 && (
+                            <tr>
+                              <td colSpan={4} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>No stores are syncing inventory products yet.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Recently Synced Products */}
+                  <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                    <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Activity size={16} style={{ color: 'var(--primary)' }} />
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Recently Synced Products</h4>
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.01)' }}>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Product Name</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Category</th>
+                            <th style={{ padding: '12px 20px' }}>Store</th>
+                            <th style={{ padding: '12px 20px', textAlign: 'right' }}>Price</th>
+                            <th style={{ padding: '12px 20px', textAlign: 'right' }}>Last Updated</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(analyticsData.recentProducts || []).map((prod: any, idx: number) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              <td style={{ padding: '12px 20px', fontWeight: 500, color: 'var(--text-main)' }}>{prod.product_name}</td>
+                              <td style={{ padding: '12px 20px', color: 'var(--text-muted)' }}>
+                                <span style={{ background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>{prod.category}</span>
+                              </td>
+                              <td style={{ padding: '12px 20px', color: 'var(--text-muted)' }}>
+                                {prod.business_name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Unnamed Store</span>}
+                              </td>
+                              <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: 'var(--primary)' }}>
+                                ₵{(prod.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '12px 20px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '12px' }}>
+                                {new Date(prod.updated_at).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                          {(analyticsData.recentProducts || []).length === 0 && (
+                            <tr>
+                              <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>No products synced recently.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Bottom navigation for phone */}
-        <nav className="portal-bottom-nav no-print" aria-label="Admin navigation" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <nav className="portal-bottom-nav no-print" aria-label="Admin navigation" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           {[
             { id: 'licenses', label: 'Licenses', icon: Key },
             { id: 'admins', label: 'Admins', icon: Users },
             { id: 'updates', label: 'Updates', icon: UploadCloud },
+            { id: 'analytics', label: 'Analytics', icon: BarChart3 },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;

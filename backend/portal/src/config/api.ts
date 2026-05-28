@@ -13,6 +13,7 @@ export const API_CONFIG = {
     ADMIN_PURGE_DUPLICATES: '/api/portal/admin/purge-duplicates',
     ADMIN_SUPER_ADMINS: '/api/portal/admin/super-admins',
     ADMIN_RELEASES: '/api/portal/admin/releases',
+    ADMIN_PRODUCT_ANALYTICS: '/api/portal/admin/product-analytics',
     OWNER_REGISTER: '/api/portal/owners/register',
     OWNER_LOGIN: '/api/portal/owners/login',
     OWNER_STORES: '/api/portal/owners/stores',
