@@ -9,7 +9,10 @@ Set-Location $root
 Write-Host 'Building installers...'
 npm run dist:publish
 
-$releaseDir = Join-Path $root 'release'
+$releaseDir = Join-Path $root 'release-staging'
+if (-not (Test-Path $releaseDir)) {
+  $releaseDir = Join-Path $root 'release'
+}
 $updatesDir = Join-Path $root 'backend' 'updates'
 if (-not (Test-Path $updatesDir)) { New-Item -ItemType Directory -Path $updatesDir | Out-Null }
 
@@ -19,10 +22,19 @@ if (-not $yml) {
 }
 
 Copy-Item -Path $yml.FullName -Destination $updatesDir -Force
-Get-ChildItem -Path $releaseDir -Include '*.exe','*.exe.blockmap' | ForEach-Object {
-  Copy-Item -Path $_.FullName -Destination $updatesDir -Force
-  Write-Host "Copied $($_.Name)"
+Get-ChildItem -Path $releaseDir -Filter '*.exe' | ForEach-Object {
+  $destName = $_.Name -replace '\s+', '-'
+  Copy-Item -Path $_.FullName -Destination (Join-Path $updatesDir $destName) -Force
+  Write-Host "Copied $($_.Name) -> $destName"
 }
+Get-ChildItem -Path $releaseDir -Filter '*.exe.blockmap' | ForEach-Object {
+  $destName = $_.Name -replace '\s+', '-'
+  Copy-Item -Path $_.FullName -Destination (Join-Path $updatesDir $destName) -Force
+}
+
+Write-Host 'Verifying checksums...'
+node (Join-Path $root 'scripts' 'verify-update-artifacts.mjs') $updatesDir
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ''
 Write-Host 'Update files ready in backend/updates/'

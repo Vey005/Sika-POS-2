@@ -27,10 +27,74 @@
   --warning: #F59E0B;
   --warning-dim: rgba(245, 158, 11, 0.12);
 
+  --chart-grid: rgba(255, 255, 255, 0.05);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 20px;
   --radius-xl: 32px;
+  
+  --role-admin-bg: rgba(212, 160, 23, 0.15);
+  --role-admin-text: #D4A017;
+  --role-manager-bg: rgba(99, 102, 241, 0.15);
+  --role-manager-text: #818CF8;
+  --role-cashier-bg: rgba(34, 197, 94, 0.12);
+  --role-cashier-text: #22C55E;
+}
+
+:root[data-theme="light"] {
+  /* Premium White & Gold Light Mode Palette */
+  --bg-base: #FAF9F5;          /* Warm alabaster white background */
+  --bg-surface: #FFFFFF;       /* Pure white panels */
+  --bg-elevated: #F4F1E8;      /* Warm golden-gray elevated panels */
+  --bg-overlay: #EAE5D8;       /* Deeper warm gold overlay */
+  
+  --primary: #C59B27;          /* Premium rich gold */
+  --primary-glow: rgba(197, 155, 39, 0.15);
+  --secondary: #C59B27;
+  --secondary-glow: rgba(197, 155, 39, 0.2);
+  
+  --text-main: #2A2415;        /* Deep gold-tinted charcoal */
+  --text-secondary: #655E4E;   /* Muted gold-gray */
+  --text-muted: #9E9786;       /* Soft gold-gray for secondary text */
+  
+  --border-light: rgba(197, 155, 39, 0.15);  /* Subtle gold borders */
+  --border-strong: rgba(197, 155, 39, 0.28); /* Stronger gold borders */
+  --border-focus: rgba(197, 155, 39, 0.6);
+  
+  --success: #16A34A;
+  --success-dim: rgba(22, 163, 74, 0.08);
+  --danger: #DC2626;
+  --danger-dim: rgba(220, 38, 38, 0.08);
+  --warning: #D97706;
+  --warning-dim: rgba(217, 119, 6, 0.08);
+  
+  --chart-grid: rgba(197, 155, 39, 0.12);
+  
+  --role-admin-bg: rgba(197, 155, 39, 0.15);
+  --role-admin-text: #C59B27;
+  --role-manager-bg: rgba(79, 70, 229, 0.12);
+  --role-manager-text: #4F46E5;
+  --role-cashier-bg: rgba(22, 163, 74, 0.12);
+  --role-cashier-text: #16A34A;
+}
+
+/* Light mode overrides for form controls */
+:root[data-theme="light"] select,
+:root[data-theme="light"] input,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] .portal-select,
+:root[data-theme="light"] .portal-date-input,
+:root[data-theme="light"] .portal-input,
+:root[data-theme="light"] .input-field,
+:root[data-theme="light"] .filter-form .filter-select {
+  background: #FFFFFF !important;
+  border: 1px solid rgba(197, 155, 39, 0.25) !important;
+  color: #2A2415 !important;
+}
+
+:root[data-theme="light"] .portal-select option {
+  background: #FFFFFF !important;
+  color: #2A2415 !important;
 }
 
 * {

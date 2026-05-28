@@ -108,3 +108,21 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(212, 160, 23, 0.2);
 }
+
+.btnSecondary {
+  padding: 10px 18px;
+  background: var(--color-gold-dim);
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-md);
+  color: var(--color-gold);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btnSecondary:hover {
+  background: var(--color-gold);
+  color: #000;
+}

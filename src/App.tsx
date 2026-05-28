@@ -9,6 +9,7 @@ import ActivationScreen from './screens/Auth/ActivationScreen';
 import SetupScreen from './screens/Auth/SetupScreen';
 import POSScreen from './screens/POS';
 import InventoryScreen from './screens/Inventory';
+import RestockScreen from './screens/Restock';
 import CustomersScreen from './screens/Customers';
 import ReportsScreen from './screens/Reports';
 import SettingsScreen from './screens/Settings';
@@ -70,6 +71,9 @@ export default function App() {
             useAuthStore.getState().setTaxConfig(JSON.parse(biz.tax_config));
           } catch(e) {}
         }
+        if (biz.tax_enabled !== undefined) {
+          useAuthStore.getState().setTaxEnabled(biz.tax_enabled === 'true' || biz.tax_enabled === '1');
+        }
         if (biz.receipt_config) {
           try {
             const saved = JSON.parse(biz.receipt_config);
@@ -102,6 +106,38 @@ export default function App() {
         const result = await promptClockOutBeforeExit(user.id);
         if (result === 'cancel') return;
         window.sikapos.window.confirmClose();
+      })();
+    });
+
+    return cleanup;
+  }, []);
+
+  // Listen for background user updates (e.g. from cloud sync)
+  useEffect(() => {
+    if (!window.sikapos?.sync?.onUsersUpdated) return;
+
+    const cleanup = window.sikapos.sync.onUsersUpdated(() => {
+      void (async () => {
+        const { user } = useAuthStore.getState();
+        if (!user) return;
+        
+        try {
+          const [biz, row] = await Promise.all([
+            window.sikapos.settings.getBusiness(),
+            window.sikapos.users.getById(user.id)
+          ]);
+          
+          if (row) {
+            const { resolveCashierNavForUser } = await import('./constants/cashierNav');
+            const newVisibility = resolveCashierNavForUser(biz.cashier_nav_visibility, row.cashier_nav_visibility);
+            useAuthStore.getState().setCashierNavVisibility(newVisibility);
+          } else {
+            // User was deleted from the portal
+            useAuthStore.getState().logout();
+          }
+        } catch (err) {
+          console.error('Failed to refresh user nav visibility on sync:', err);
+        }
       })();
     });
 
@@ -170,6 +206,7 @@ export default function App() {
           <Route index element={<Navigate to="/pos" replace />} />
           <Route path="pos" element={<POSScreen />} />
           <Route path="inventory" element={<InventoryScreen />} />
+          <Route path="restock" element={<RestockScreen />} />
           <Route path="customers" element={<CustomersScreen />} />
           <Route path="dashboard" element={<DashboardScreen />} />
           <Route path="reports" element={<ReportsScreen />} />

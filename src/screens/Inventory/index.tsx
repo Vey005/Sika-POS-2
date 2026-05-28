@@ -1,16 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatCurrency } from '../../utils/format';
 import { formatErrorMsg } from '../../utils/errorFormatter';
 import { formatExpiryDate, getExpiryStatus } from '../../utils/expiry';
 import { useAuthStore } from '../../store/auth';
+import { useCartStore } from '../../store/cart';
 import { showAlert, showConfirm } from '../../store/dialogStore';
 import styles from './Inventory.module.css';
 
 const EMPTY_PRODUCT: Partial<Product> = {
   name: '', barcode: '', category: 'General', unit_price: 0,
   cost_price: 0, stock_qty: 0, low_stock_threshold: 5,
-  tax_category: 'standard', unit: 'each', pack_size: 1, pack_price: 0, pack_label: 'Box', size: '', image_path: '',
+  unit: 'each', pack_size: 1, pack_price: 0, pack_label: 'Box', size: '', image_path: '',
   is_pharmacy: 0, is_inventory: 1, stock_unit: 'single', expiry_date: '', expiry_alert_months: null,
 };
 
@@ -22,11 +23,14 @@ export default function InventoryScreen() {
   const [editProduct, setEditProduct] = useState<Partial<Product> | null>(null);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [hasPack, setHasPack] = useState(false);
   const [activeCategory, setActiveCategory] = useState('All');
   const [categories, setCategories] = useState<string[]>(['All']);
   const [showLowStock, setShowLowStock] = useState(searchParams.get('filter') === 'low');
   const [showExpiring, setShowExpiring] = useState(searchParams.get('filter') === 'expiring');
   const [defaultExpiryAlertMonths, setDefaultExpiryAlertMonths] = useState(3);
+  const [expandedBatchProduct, setExpandedBatchProduct] = useState<number | null>(null);
+  const [batchData, setBatchData] = useState<ProductBatch[]>([]);
 
   // Initial load for categories only
   useEffect(() => {
@@ -114,6 +118,7 @@ export default function InventoryScreen() {
         await load();
         setShowForm(false);
         setEditProduct(null);
+        void useCartStore.getState().refreshStockLevels();
         window.sikapos.notifications.show('Success', 'Product saved successfully.');
       } else {
         await showAlert(formatErrorMsg(result.message, 'Failed to save product.'));
@@ -142,11 +147,29 @@ export default function InventoryScreen() {
     }
   };
 
+  const handleHasPackChange = (checked: boolean) => {
+    setHasPack(checked);
+    if (!checked) {
+      setEditProduct(p => p ? {
+        ...p,
+        pack_size: 1,
+        pack_price: 0,
+        pack_label: 'Box',
+        stock_unit: 'single'
+      } : null);
+    }
+  };
+
   const openAdd = () => {
     setEditProduct({ ...EMPTY_PRODUCT, expiry_alert_months: null });
+    setHasPack(false);
     setShowForm(true);
   };
-  const openEdit = (p: Product) => { setEditProduct({ ...p }); setShowForm(true); };
+  const openEdit = (p: Product) => {
+    setEditProduct({ ...p });
+    setHasPack((p.pack_size ?? 1) > 1 || (p.pack_price ?? 0) > 0 || p.stock_unit === 'pack');
+    setShowForm(true);
+  };
 
   const handleImport = async () => {
     if (!window.sikapos) return;
@@ -154,6 +177,7 @@ export default function InventoryScreen() {
     if (result.success) {
       await showAlert(`Successfully imported ${result.count} items.`);
       await load();
+      void useCartStore.getState().refreshStockLevels();
     } else if (result.message !== 'Import cancelled') {
       await showAlert(`Import failed: ${formatErrorMsg(result.message)}`);
     }
@@ -163,7 +187,13 @@ export default function InventoryScreen() {
     if (!window.sikapos) return;
     const result = await window.sikapos.inventory.downloadTemplate();
     if (result.success) {
-      await showAlert('Template downloaded successfully.');
+      await showAlert(
+        result.message
+          ? result.message
+          : 'Template downloaded successfully.'
+      );
+    } else if (result.message && result.message !== 'Save cancelled') {
+      await showAlert(result.message);
     }
   };
 
@@ -304,7 +334,7 @@ export default function InventoryScreen() {
                 <th>Price</th>
                 <th>Cost</th>
                 <th>Stock</th>
-                <th>{showExpiring ? 'Expiry' : 'Tax'}</th>
+                <th>Expiry</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -317,7 +347,8 @@ export default function InventoryScreen() {
                 const alertMonths = p.expiry_alert_months ?? defaultExpiryAlertMonths;
                 const expiryStatus = p.is_pharmacy === 1 ? getExpiryStatus(p.expiry_date, alertMonths) : 'none';
                 return (
-                  <tr key={p.id} className={styles.tableRow} onClick={() => openEdit(p)}>
+                  <Fragment key={p.id}>
+                  <tr className={styles.tableRow} onClick={() => openEdit(p)}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         {p.image_path ? (
@@ -340,10 +371,10 @@ export default function InventoryScreen() {
                     <td>
                       {p.is_inventory === 1 ? (
                         <span className={`
-                          ${styles.stockBadge} 
-                          ${p.stock_qty < 0 ? styles.stockNegative : 
-                            p.stock_qty === 0 ? styles.stockOut : 
-                            p.stock_qty <= p.low_stock_threshold ? styles.stockLow : 
+                          ${styles.stockBadge}
+                          ${p.stock_qty < 0 ? styles.stockNegative :
+                            p.stock_qty === 0 ? styles.stockOut :
+                            p.stock_qty <= p.low_stock_threshold ? styles.stockLow :
                             styles.stockOk}
                         `}>
                           {p.stock_qty} {p.stock_unit === 'pack' ? (p.pack_label || 'boxes') : p.unit}
@@ -352,23 +383,101 @@ export default function InventoryScreen() {
                         <span className={styles.serviceBadge}>Service</span>
                       )}
                     </td>
-                    <td>
-                      {showExpiring || p.is_pharmacy === 1 ? (
-                        <span className={`${styles.expiryBadge} ${
-                          expiryStatus === 'expired' ? styles.expiryExpired :
-                          expiryStatus === 'expiring' ? styles.expirySoon : styles.expiryOk
-                        }`}>
-                          {p.expiry_date ? formatExpiryDate(p.expiry_date) : '—'}
-                          {expiryStatus === 'expired' ? ' · Expired' : expiryStatus === 'expiring' ? ' · Soon' : ''}
-                        </span>
+                    <td onClick={e => {
+                      e.stopPropagation();
+                      if (p.is_pharmacy !== 1) return;
+                      if (expandedBatchProduct === p.id) {
+                        setExpandedBatchProduct(null);
+                        setBatchData([]);
+                      } else {
+                        setExpandedBatchProduct(p.id);
+                        window.sikapos?.inventory.getBatches(p.id).then(setBatchData).catch(() => setBatchData([]));
+                      }
+                    }} style={{ cursor: p.is_pharmacy === 1 ? 'pointer' : 'default' }}>
+                      {p.is_pharmacy === 1 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                          <span className={`${styles.expiryBadge} ${
+                            expiryStatus === 'expired' ? styles.expiryExpired :
+                            expiryStatus === 'expiring' ? styles.expirySoon : styles.expiryOk
+                          }`}>
+                            {p.expiry_date ? formatExpiryDate(p.expiry_date) : '—'}
+                            {expiryStatus === 'expired' ? ' · Expired' : expiryStatus === 'expiring' ? ' · Soon' : ''}
+                          </span>
+                          {p.batch_number && (
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              Batch: {p.batch_number}
+                              <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-gold)' }}>
+                                {expandedBatchProduct === p.id ? '▲' : '▼'}
+                              </span>
+                            </span>
+                          )}
+                          {!p.batch_number && (
+                            <span style={{ fontSize: '10px', color: 'var(--color-gold)' }}>
+                              {expandedBatchProduct === p.id ? '▲ Hide batches' : '▼ View batches'}
+                            </span>
+                          )}
+                        </div>
                       ) : (
-                        <span className={styles.taxTag}>{p.tax_category === 'zero_rated' ? 'Zero' : p.tax_category === 'exempt' ? 'Exempt' : 'STD'}</span>
+                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
                       )}
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       <button className={styles.deleteBtn} onClick={() => handleDelete(p.id)}>Delete</button>
                     </td>
                   </tr>
+                  {/* Batch breakdown row */}
+                  {expandedBatchProduct === p.id && batchData.length > 0 && (
+                    <tr style={{ background: 'var(--color-surface)' }}>
+                      <td colSpan={7} style={{ padding: '0 var(--space-3) var(--space-3)' }}>
+                        <div style={{
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 'var(--radius-md)',
+                          overflow: 'hidden',
+                          margin: '4px 0 4px 36px',
+                        }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ background: 'var(--color-elevated)' }}>
+                                <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Batch #</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Expiry</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Stock</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Cost</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {batchData.map((b, bi) => {
+                                const batchExpiry = b.expiry_date ? getExpiryStatus(b.expiry_date, p.expiry_alert_months ?? defaultExpiryAlertMonths) : 'ok';
+                                return (
+                                  <tr key={b.id} style={{ borderTop: bi > 0 ? '1px solid var(--color-border)' : 'none' }}>
+                                    <td style={{ padding: '8px 10px', fontFamily: 'var(--font-mono)', color: 'var(--color-text-primary)', fontWeight: 500 }}>
+                                      {b.batch_number || <span style={{ color: 'var(--color-text-muted)' }}>Legacy</span>}
+                                    </td>
+                                    <td style={{ padding: '8px 10px' }}>
+                                      {b.expiry_date ? (
+                                        <span className={`${styles.expiryBadge} ${
+                                          batchExpiry === 'expired' ? styles.expiryExpired :
+                                          batchExpiry === 'expiring' ? styles.expirySoon : styles.expiryOk
+                                        }`}>
+                                          {formatExpiryDate(b.expiry_date)}
+                                        </span>
+                                      ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                                    </td>
+                                    <td style={{ padding: '8px 10px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: b.stock_qty <= 0 ? 'var(--color-danger)' : 'var(--color-text-primary)' }}>
+                                      {b.stock_qty}
+                                    </td>
+                                    <td style={{ padding: '8px 10px', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+                                      {useAuthStore.getState().receiptConfig.currency} {formatCurrency(b.cost_price)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -378,7 +487,7 @@ export default function InventoryScreen() {
 
       {/* Add/Edit panel */}
       {showForm && editProduct && (
-        <div className={styles.formOverlay} onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+        <div className={styles.formOverlay}>
           <div className={styles.formPanel}>
             <div className={styles.formHeader}>
               <h2>{editProduct.id ? 'Edit Product' : 'Add Product'}</h2>
@@ -449,25 +558,6 @@ export default function InventoryScreen() {
                   <input value={editProduct.unit || 'each'} onChange={e => setEditProduct(p => ({ ...p!, unit: e.target.value }))} placeholder="each, bottle, bag..." />
                 </div>
                 <div className={styles.formField}>
-                  <label>Pack Size (units per box)</label>
-                  <input type="number" min={1} value={editProduct.pack_size || 1} onChange={e => setEditProduct(p => ({ ...p!, pack_size: Math.max(1, parseInt(e.target.value) || 1) }))} />
-                </div>
-                <div className={styles.formField}>
-                  <label>Pack Label</label>
-                  <input value={editProduct.pack_label || 'Box'} onChange={e => setEditProduct(p => ({ ...p!, pack_label: e.target.value || 'Box' }))} placeholder="Box, Crate, Carton..." />
-                </div>
-                <div className={styles.formField}>
-                  <label>Pack Price ({useAuthStore.getState().receiptConfig.currency})</label>
-                  <input type="number" min={0} step={0.01} value={editProduct.pack_price || 0} onChange={e => setEditProduct(p => ({ ...p!, pack_price: parseFloat(e.target.value) || 0 }))} />
-                </div>
-                <div className={styles.formField}>
-                  <label>Stock Tracking Unit</label>
-                  <select value={editProduct.stock_unit || 'single'} onChange={e => setEditProduct(p => ({ ...p!, stock_unit: e.target.value as 'single' | 'pack' }))}>
-                    <option value="single">By Single Unit</option>
-                    <option value="pack">By {editProduct.pack_label || 'Box'} (bulk/loose)</option>
-                  </select>
-                </div>
-                <div className={styles.formField}>
                   <label>Size / Volume</label>
                   <input value={editProduct.size || ''} onChange={e => setEditProduct(p => ({ ...p!, size: e.target.value }))} placeholder="e.g. 500ml, 1kg, Large" />
                 </div>
@@ -479,15 +569,43 @@ export default function InventoryScreen() {
                   <label>Cost Price ({useAuthStore.getState().receiptConfig.currency})</label>
                   <input type="number" min={0} step={0.01} value={editProduct.cost_price || 0} onChange={e => setEditProduct(p => ({ ...p!, cost_price: parseFloat(e.target.value) || 0 }))} />
                 </div>
-                <div className={`${styles.formField} ${styles.fullWidth}`}>
-                  <label>Tax Category</label>
-                  <select value={editProduct.tax_category || 'standard'} onChange={e => setEditProduct(p => ({ ...p!, tax_category: e.target.value as Product['tax_category'] }))}>
-                    <option value="standard">Standard (VAT 12.5% + NHIL + GETFund + COVID)</option>
-                    <option value="zero_rated">Zero-Rated (Food, water, medicine)</option>
-                    <option value="exempt">Exempt (No tax)</option>
-                  </select>
-                </div>
               </div>
+
+              {/* Pack Product toggle */}
+              <div className={styles.pharmacyToggle}>
+                <label className={styles.toggleLabel}>
+                  <input
+                    type="checkbox"
+                    checked={hasPack}
+                    onChange={e => handleHasPackChange(e.target.checked)}
+                  />
+                  <span>Product has packs (for bulk / box sales)</span>
+                </label>
+              </div>
+
+              {hasPack && (
+                <div className={styles.formGrid}>
+                  <div className={styles.formField}>
+                    <label>Pack Size (units per box)</label>
+                    <input type="number" min={1} value={editProduct.pack_size || 1} onChange={e => setEditProduct(p => ({ ...p!, pack_size: Math.max(1, parseInt(e.target.value) || 1) }))} />
+                  </div>
+                  <div className={styles.formField}>
+                    <label>Pack Label</label>
+                    <input value={editProduct.pack_label || 'Box'} onChange={e => setEditProduct(p => ({ ...p!, pack_label: e.target.value || 'Box' }))} placeholder="Box, Crate, Carton..." />
+                  </div>
+                  <div className={styles.formField}>
+                    <label>Pack Price ({useAuthStore.getState().receiptConfig.currency})</label>
+                    <input type="number" min={0} step={0.01} value={editProduct.pack_price || 0} onChange={e => setEditProduct(p => ({ ...p!, pack_price: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                  <div className={styles.formField}>
+                    <label>Stock Tracking Unit</label>
+                    <select value={editProduct.stock_unit || 'single'} onChange={e => setEditProduct(p => ({ ...p!, stock_unit: e.target.value as 'single' | 'pack' }))}>
+                      <option value="single">By Single Unit</option>
+                      <option value="pack">By {editProduct.pack_label || 'Box'} (bulk/loose)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* Inventory vs Service toggle */}
               <div className={styles.pharmacyToggle}>

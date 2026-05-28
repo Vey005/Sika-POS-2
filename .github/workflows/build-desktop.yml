@@ -30,9 +30,10 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          release/latest.yml
-          release/*.exe
-          release/*.blockmap        draft: false
+          release-staging/latest.yml
+          release-staging/*.exe
+          release-staging/*.blockmap
+        draft: false
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

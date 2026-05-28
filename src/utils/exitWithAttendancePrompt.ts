@@ -1,4 +1,4 @@
-import { showConfirm } from '../store/dialogStore';
+import { showAttendanceExit } from '../store/dialogStore';
 
 /**
  * If the user is clocked in, prompts whether to clock out before leaving (logout / quit).
@@ -10,14 +10,19 @@ export async function promptClockOutBeforeExit(userId: number): Promise<'proceed
     const status = await window.sikapos.attendance.getStatus(userId);
     if (!status || status.type !== 'in') return 'proceed';
 
-    const ok = await showConfirm(
-      'You are still clocked in.\n\n' +
-        'Click OK to clock out and continue, or Cancel to stay signed in.'
+    const choice = await showAttendanceExit(
+      'You are currently clocked in. Do you want to clock out before logging out/exiting?',
+      'Active Shift'
     );
-    if (!ok) return 'cancel';
 
-    await window.sikapos.attendance.clockOut(userId);
-    window.dispatchEvent(new Event('attendance-changed'));
+    if (choice === 'cancel') return 'cancel';
+
+    if (choice === 'clock_out') {
+      await window.sikapos.attendance.clockOut(userId);
+      window.dispatchEvent(new Event('attendance-changed'));
+    }
+
+    // Both 'clock_out' and 'stay_in' mean we proceed with the exit/logout
     return 'proceed';
   } catch {
     // Do not block exit if attendance fails

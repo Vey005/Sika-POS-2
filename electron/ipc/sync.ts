@@ -12,6 +12,11 @@ export function registerSyncHandlers(syncManager: SyncManager) {
     return await syncManager.restoreFromCloud();
   });
 
+  ipcMain.handle('sync:getPendingCount', () => {
+    const db = getDb();
+    return db.prepare("SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'").pluck().get() as number;
+  });
+
   ipcMain.handle('sync:queueItem', (_event, item: {
     entity: string;
     operation: string;

@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../db/database';
+import { depleteStockFEFO, restoreStockFromDepletions } from '../db/batch-helpers';
 
 // Ghana Tax Rates 2024
 const GHANA_TAX = {
@@ -92,6 +93,7 @@ export function registerSalesHandlers() {
       sale_unit?: 'single' | 'pack';
       unit_multiplier?: number;
       unit_price: number;
+      adjusted_price?: number;
       cost_price: number;
       is_inventory: number;
       tax_category: string;
@@ -106,15 +108,25 @@ export function registerSalesHandlers() {
     momo_reference?: string;
     order_type?: string;
     order_note?: string;
+    split_cash?: number;
+    split_momo?: number;
   }) => {
     // ── Input Validation ──
     if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
       throw new Error('Transaction must contain at least one item.');
     }
+    
+    // Apply adjusted prices to unit_price before processing
+    for (const item of data.items) {
+      if (item.adjusted_price !== undefined) {
+        item.unit_price = item.adjusted_price;
+      }
+    }
+
     if (!data.cashier_name || typeof data.cashier_name !== 'string') {
       throw new Error('Cashier name is required.');
     }
-    const validPaymentMethods = ['cash', 'momo', 'card', 'credit'];
+    const validPaymentMethods = ['cash', 'momo', 'credit', 'split'];
     if (!validPaymentMethods.includes(data.payment_method)) {
       throw new Error(`Invalid payment method: ${data.payment_method}`);
     }
@@ -167,9 +179,17 @@ export function registerSalesHandlers() {
     const tax = calculateGhanaTax(round2(adjustedStandardSubtotal), 'standard');
     const grandTotal = round2(discountedSubtotal + tax.totalTax);
 
-    if (data.payment_method !== 'credit') {
+    if (data.payment_method === 'split') {
+      if (typeof data.split_cash !== 'number' || typeof data.split_momo !== 'number' || data.split_cash < 0 || data.split_momo < 0) {
+        throw new Error('Both Cash and MoMo amounts are required and must be non-negative for a split payment.');
+      }
+      data.amount_tendered = data.split_cash + data.split_momo;
+      if (data.amount_tendered < grandTotal) {
+        throw new Error(`Amount tendered (${data.amount_tendered}) is less than the total due (${grandTotal}).`);
+      }
+    } else if (data.payment_method !== 'credit') {
       if (typeof data.amount_tendered !== 'number' || data.amount_tendered < 0) {
-        throw new Error('Amount tendered is required and must be a non-negative number for cash, momo, and card payments.');
+        throw new Error('Amount tendered is required and must be a non-negative number for cash and momo payments.');
       }
       if (data.amount_tendered < grandTotal) {
         throw new Error(`Amount tendered (${data.amount_tendered}) is less than the total due (${grandTotal}).`);
@@ -212,8 +232,9 @@ export function registerSalesHandlers() {
         INSERT INTO transactions (
           receipt_number, customer_id, customer_name, cashier_name, status, payment_method,
           subtotal, discount_amount, discount_type, tax_vat, tax_nhil, tax_getfund, tax_covid,
-          total_tax, grand_total, amount_tendered, change_given, momo_reference, paid_amount
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          total_tax, grand_total, amount_tendered, change_given, momo_reference, paid_amount,
+          split_cash, split_momo
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         receiptNumber, data.customer_id || null, data.customer_name || null,
         data.cashier_name || 'Cashier', status, data.payment_method,
@@ -221,7 +242,8 @@ export function registerSalesHandlers() {
         tax.vat, tax.nhil, tax.getfund, tax.covid,
         tax.totalTax, grandTotal,
         storedAmountTendered, changeGiven,
-        data.momo_reference || null, paidAmount
+        data.momo_reference || null, paidAmount,
+        data.split_cash || 0, data.split_momo || 0
       );
 
       const transactionId = Number(txResult.lastInsertRowid);
@@ -243,7 +265,7 @@ export function registerSalesHandlers() {
           Math.max(1, Number(item.unit_multiplier || 1))
         );
 
-        // Deduct stock if it's an inventory item
+        // Deduct stock if it's an inventory item — FEFO batch depletion
         if (item.product_id && item.is_inventory === 1) {
           const prodInfo = db.prepare(`SELECT stock_unit FROM products WHERE id = ?`).get(item.product_id) as { stock_unit: string } | undefined;
           const stockUnit = prodInfo?.stock_unit || 'single';
@@ -260,10 +282,9 @@ export function registerSalesHandlers() {
           }
 
           if (unitsToDeduct > 0) {
-            db.prepare(`
-              UPDATE products SET stock_qty = ROUND(stock_qty - ?, 2), updated_at = datetime('now')
-              WHERE id = ?
-            `).run(unitsToDeduct, item.product_id);
+            // Deplete from earliest-expiring batch first (FEFO)
+            // Pass transactionId so we can record which batches were depleted
+            depleteStockFEFO(db, item.product_id, unitsToDeduct, transactionId);
 
             // Push updated product to sync queue (priority 5 for products)
             const updatedProduct = db.prepare(`SELECT * FROM products WHERE id = ?`).get(item.product_id);
@@ -322,6 +343,8 @@ export function registerSalesHandlers() {
         amount_tendered: storedAmountTendered,
         change_given: changeGiven,
         paid_amount: paidAmount,
+        split_cash: data.split_cash || 0,
+        split_momo: data.split_momo || 0,
         created_at: txCreatedAt,
         items: data.items.map(i => ({
           product_id: i.product_id,
@@ -414,7 +437,7 @@ export function registerSalesHandlers() {
       const items = db.prepare(`SELECT * FROM transaction_items WHERE transaction_id = ?`).all(id) as any[];
       console.log(`[DB] Restoring stock for ${items.length} items`);
 
-      // 1. Restore stock
+      // 1. Restore stock — restore to exact original batches
       for (const item of items) {
         if (item.product_id) {
           const prodInfo = db.prepare(`SELECT stock_unit FROM products WHERE id = ?`).get(item.product_id) as { stock_unit: string } | undefined;
@@ -430,8 +453,8 @@ export function registerSalesHandlers() {
           }
 
           if (unitsToRestore > 0) {
-            db.prepare(`UPDATE products SET stock_qty = ROUND(stock_qty + ?, 2), updated_at = datetime('now') WHERE id = ?`)
-              .run(unitsToRestore, item.product_id);
+            // Restore to the exact batches that were depleted during this transaction
+            restoreStockFromDepletions(db, id, item.product_id, unitsToRestore);
           }
         }
       }
@@ -469,10 +492,19 @@ export function registerSalesHandlers() {
         .run(newStatus, reason, id);
 
       // 4. Queue for sync (priority 1 for transactions)
+      const updatedTx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(id) as any;
       db.prepare(`
         INSERT INTO sync_queue (entity, operation, payload, status, priority)
         VALUES ('transaction', 'update', ?, 'pending', 1)
-      `).run(JSON.stringify({ id, status: newStatus, reason }));
+      `).run(JSON.stringify({
+        id,
+        receipt_number: updatedTx?.receipt_number ?? tx.receipt_number,
+        status: newStatus,
+        reason,
+        void_reason: reason,
+        paid_amount: 0,
+        updated_at: updatedTx?.updated_at ?? new Date().toISOString(),
+      }));
 
       return { success: true };
     } catch (err: any) {
@@ -486,8 +518,8 @@ export function registerSalesHandlers() {
         COUNT(*) as transaction_count,
         COALESCE(SUM(paid_amount), 0) as total_revenue,
         COALESCE(AVG(paid_amount), 0) as avg_basket,
-        COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total ELSE 0 END), 0) as cash_total,
-        COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total ELSE 0 END), 0) as momo_total,
+        COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total WHEN payment_method = 'split' THEN split_cash - change_given ELSE 0 END), 0) as cash_total,
+        COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total WHEN payment_method = 'split' THEN split_momo ELSE 0 END), 0) as momo_total,
         COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0) as card_total,
         COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total - paid_amount ELSE 0 END), 0) as credit_issued_total
       FROM transactions
@@ -574,8 +606,8 @@ export function registerSalesHandlers() {
         SELECT
           COUNT(*) as transaction_count,
           COALESCE(SUM(paid_amount), 0) as total_revenue,
-          COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total ELSE 0 END), 0) as cash_total,
-          COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total ELSE 0 END), 0) as momo_total,
+          COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total WHEN payment_method = 'split' THEN split_cash - change_given ELSE 0 END), 0) as cash_total,
+          COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total WHEN payment_method = 'split' THEN split_momo ELSE 0 END), 0) as momo_total,
           COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0) as card_total,
           COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total - paid_amount ELSE 0 END), 0) as credit_total
         FROM transactions
@@ -668,14 +700,60 @@ export function registerSalesHandlers() {
         AND t.created_at <= ?
         AND t.status IN ${SHIFT_SALE_STATUSES}
       ORDER BY t.created_at DESC
-    `).all(cashierName, clockIn, endTime);
+    `).all(cashierName, clockIn, endTime) as Array<{ id: number } & Record<string, unknown>>;
+
+    let transactionsWithItems = transactions;
+    if (transactions.length > 0) {
+      const txIds = transactions.map((t) => t.id);
+      const placeholders = txIds.map(() => '?').join(',');
+      const items = db
+        .prepare(
+          `SELECT * FROM transaction_items WHERE transaction_id IN (${placeholders}) ORDER BY transaction_id, id`
+        )
+        .all(...txIds) as Array<Record<string, unknown> & { transaction_id: number }>;
+      const itemsByTx = new Map<number, typeof items>();
+      for (const item of items) {
+        const list = itemsByTx.get(item.transaction_id) || [];
+        list.push(item);
+        itemsByTx.set(item.transaction_id, list);
+      }
+      transactionsWithItems = transactions.map((t) => ({
+        ...t,
+        items: itemsByTx.get(t.id) || [],
+      }));
+    }
+
+    const itemSummary = db
+      .prepare(
+        `
+      SELECT 
+        ti.product_name,
+        ti.product_size,
+        SUM(
+          CASE 
+            WHEN LOWER(COALESCE(ti.sale_unit, '')) = 'pack' 
+            THEN ti.quantity * COALESCE(NULLIF(ti.unit_multiplier, 0), 1)
+            ELSE ti.quantity
+          END
+        ) as total_qty
+      FROM transaction_items ti
+      INNER JOIN transactions t ON t.id = ti.transaction_id
+      WHERE t.cashier_name = ?
+        AND t.created_at >= ?
+        AND t.created_at <= ?
+        AND t.status IN ${SHIFT_SALE_STATUSES}
+      GROUP BY ti.product_name, ti.product_size
+      ORDER BY total_qty DESC
+    `
+      )
+      .all(cashierName, clockIn, endTime);
 
     const summary = db.prepare(`
       SELECT 
         COUNT(*) as transaction_count,
         COALESCE(SUM(paid_amount), 0) as total_revenue,
-        COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total ELSE 0 END), 0) as cash_total,
-        COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total ELSE 0 END), 0) as momo_total,
+        COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total WHEN payment_method = 'split' THEN split_cash - change_given ELSE 0 END), 0) as cash_total,
+        COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total WHEN payment_method = 'split' THEN split_momo ELSE 0 END), 0) as momo_total,
         COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0) as card_total,
         COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total - paid_amount ELSE 0 END), 0) as credit_total
       FROM transactions
@@ -696,6 +774,6 @@ export function registerSalesHandlers() {
       summary.debt_recovered = payments.total || 0;
     }
 
-    return { transactions, summary };
+    return { transactions: transactionsWithItems, summary, itemSummary };
   });
 }

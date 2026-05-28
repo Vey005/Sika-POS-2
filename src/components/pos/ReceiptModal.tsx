@@ -202,7 +202,7 @@ export default function ReceiptModal({ result, onClose }: Props) {
         </div>
 
         {/* Receipt body */}
-        <div className={styles.receipt}>
+        <div className={`${styles.receipt} ${rc.template === 'compact' ? styles.compactReceipt : rc.template === 'elegant' ? styles.elegantReceipt : ''}`}>
           {/* Business info */}
           <div className={styles.receiptHeader}>
             {rc.showLogo && businessLogo && (
@@ -274,8 +274,9 @@ export default function ReceiptModal({ result, onClose }: Props) {
 
           {/* Items */}
           <div className={styles.items}>
-            {items.map(item => (
-              <div key={item.product_id} className={styles.item}>
+            {items.map((item, index) => (
+              <div key={item.product_id}>
+                <div className={styles.item}>
                 <span className={styles.itemName}>
                   {item.product_name}
                   {item.product_size && <em className={styles.itemSize}>({item.product_size})</em>}
@@ -283,6 +284,8 @@ export default function ReceiptModal({ result, onClose }: Props) {
                 <span className={styles.itemQty}>{item.quantity}</span>
                 <span className={styles.itemPrice}>{item.unit_price.toFixed(2)}</span>
                 <span className={styles.itemTotal}>{(item.unit_price * item.quantity).toFixed(2)}</span>
+                </div>
+                {index < items.length - 1 && <div className={styles.itemDivider} aria-hidden />}
               </div>
             ))}
           </div>
@@ -359,6 +362,14 @@ export default function ReceiptModal({ result, onClose }: Props) {
 
         {/* Actions */}
         <div className={styles.actions}>
+          <button
+            type="button"
+            className={styles.printBtn}
+            title="Opens system print dialog (preview without a printer)"
+            onClick={() => window.print()}
+          >
+            Preview
+          </button>
           <button className={styles.printBtn} onClick={handlePrint}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="6 9 6 2 18 2 18 9"/>

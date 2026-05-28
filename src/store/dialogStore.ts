@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type DialogType = 'alert' | 'confirm' | 'prompt';
+export type DialogType = 'alert' | 'confirm' | 'prompt' | 'attendanceExit';
 
 export interface DialogOptions {
   title?: string;
@@ -15,6 +15,7 @@ interface DialogState {
   showAlert: (message: string, title?: string) => Promise<boolean>;
   showConfirm: (message: string, title?: string) => Promise<boolean>;
   showPrompt: (message: string, title?: string, defaultValue?: string) => Promise<string | null>;
+  showAttendanceExit: (message: string, title?: string) => Promise<'clock_out' | 'stay_in' | 'cancel'>;
   closeDialog: (result: any) => void;
 }
 
@@ -57,6 +58,18 @@ export const useDialogStore = create<DialogState>((set, get) => ({
       });
     });
   },
+  showAttendanceExit: (message: string, title?: string) => {
+    return new Promise<'clock_out' | 'stay_in' | 'cancel'>((resolve) => {
+      set({
+        currentDialog: {
+          message,
+          title: title || 'Active Shift',
+          type: 'attendanceExit',
+          resolve,
+        },
+      });
+    });
+  },
   closeDialog: (result: any) => {
     const { currentDialog } = get();
     if (currentDialog) {
@@ -75,3 +88,6 @@ export const showConfirm = (message: string, title?: string) =>
 
 export const showPrompt = (message: string, title?: string, defaultValue?: string) => 
   useDialogStore.getState().showPrompt(message, title, defaultValue);
+
+export const showAttendanceExit = (message: string, title?: string) => 
+  useDialogStore.getState().showAttendanceExit(message, title);

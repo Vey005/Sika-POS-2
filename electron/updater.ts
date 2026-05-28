@@ -128,16 +128,35 @@ export function initAutoUpdater() {
 
   autoUpdater.on('error', err => {
     console.error('[Updates]', err);
-    const raw = err.message || String(err);
-    const friendly = /sending request for url/i.test(raw)
-      ? 'Could not reach the update server. Check your internet connection, or try again later.'
-      : raw;
     setState({
       status: 'error',
-      error: friendly,
+      error: formatUpdateError(err),
       message: 'Could not check for updates.',
     });
   });
+}
+
+function formatUpdateError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+
+  if (/sending request for url|network|econnrefused|etimedout|enotfound/i.test(raw)) {
+    return 'Could not reach the update server. Check your internet connection, VPN, or firewall.';
+  }
+  if (
+    /404|not found|no published versions|releases feed|cannot find/i.test(lower) ||
+    (lower.includes('github') && lower.includes('release'))
+  ) {
+    return `No release found on GitHub (${GITHUB_OWNER}/${GITHUB_REPO}). Publish a version tag with an installer first.`;
+  }
+  if (/latest\.yml|invalid.*yaml|parse/i.test(lower)) {
+    return 'The update feed on GitHub is invalid or incomplete. Re-publish the release with latest.yml and the installer.';
+  }
+  if (/sha512 checksum mismatch|checksum mismatch/i.test(lower)) {
+    return 'The installer on the update server does not match latest.yml. In the admin portal, upload the installer again, then latest.yml (same build folder), or republish after deploying the server fix.';
+  }
+
+  return raw || 'Unknown update error.';
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
@@ -163,7 +182,7 @@ export async function checkForUpdates(): Promise<UpdateState> {
   } catch (err: any) {
     setState({
       status: 'error',
-      error: err?.message || String(err),
+      error: formatUpdateError(err),
       message: 'Could not check for updates.',
     });
   }

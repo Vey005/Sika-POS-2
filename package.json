@@ -1,6 +1,6 @@
 {
   "name": "sikapos-electron",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SikaPOS ? Premium Point of Sale for Ghanaian Shops",
   "main": "dist-electron/electron/main.js",
   "author": "DanniTech Solution",
@@ -11,8 +11,13 @@
     "dev:electron": "wait-on tcp:5173 && tsc -p tsconfig.electron.json && electron . --disable-gpu --disable-software-rasterizer --no-sandbox",
     "build": "vite build && tsc -p tsconfig.electron.json",
     "preview": "electron . --disable-gpu --disable-software-rasterizer --no-sandbox",
-    "dist": "npm run build && electron-builder",
-    "dist:publish": "npm run build && electron-builder --publish never",
+    "dist:prepare": "node scripts/prepare-dist.mjs",
+    "dist:clean": "node scripts/clean-release-temp.mjs",
+    "dist:setup": "npm run build && npm run dist:prepare && npm run dist:clean && electron-builder --win nsis -c.directories.output=release-staging",
+    "dist:portable": "npm run dist:prepare && npm run dist:clean && electron-builder --win portable -c.directories.output=release-staging",
+    "dist": "npm run build && npm run dist:prepare && npm run dist:clean && electron-builder --win nsis -c.directories.output=release-staging && npm run dist:clean && electron-builder --win portable -c.directories.output=release-staging",
+    "dist:publish": "npm run build && npm run dist:prepare && npm run dist:clean && electron-builder --win nsis -c.directories.output=release-staging --publish never && npm run dist:clean && electron-builder --win portable -c.directories.output=release-staging --publish never",
+    "postinstall": "electron-builder install-app-deps",
     "release:github": "npm run build && electron-builder --win --publish always",
     "release:patch": "npm version patch && npm run dist:publish",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3 usb node-hid"
@@ -29,6 +34,9 @@
       "dist-electron/**/*",
       "package.json"
     ],
+    "extraResources": [
+      "app-update.yml"
+    ],
     "win": {
       "target": [
         "nsis",
@@ -42,10 +50,8 @@
       "createDesktopShortcut": true
     },
     "publish": {
-      "provider": "github",
-      "owner": "Vey005",
-      "repo": "Sika-POS-2",
-      "releaseType": "release"
+      "provider": "generic",
+      "url": "https://sikapos-api-production.up.railway.app/updates/"
     }
   },
   "dependencies": {

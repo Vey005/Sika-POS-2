@@ -10,8 +10,8 @@ interface Props {
   onComplete: (result: TransactionResult) => void;
 }
 
-type PaymentMethod = 'cash' | 'momo' | 'card' | 'credit';
-type Step = 'method' | 'cash' | 'momo' | 'card' | 'credit' | 'processing';
+type PaymentMethod = 'cash' | 'momo' | 'split' | 'credit';
+type Step = 'method' | 'cash' | 'momo' | 'split' | 'credit' | 'processing';
 
 const QUICK_AMOUNTS = [50, 100, 200, 500];
 
@@ -20,6 +20,41 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [amountTendered, setAmountTendered] = useState('');
   const [momoPhone, setMomoPhone] = useState('');
+  const [splitCash, setSplitCash] = useState('');
+  const [splitMomo, setSplitMomo] = useState('');
+
+  const handleSplitCashChange = (val: string) => {
+    setSplitCash(val);
+    if (val === '') {
+      setSplitMomo('');
+      return;
+    }
+    const cashVal = parseFloat(val);
+    if (isNaN(cashVal)) return;
+    const remaining = total - cashVal;
+    if (remaining > 0) {
+      setSplitMomo(parseFloat(remaining.toFixed(2)).toString());
+    } else {
+      setSplitMomo('0');
+    }
+  };
+
+  const handleSplitMomoChange = (val: string) => {
+    setSplitMomo(val);
+    if (val === '') {
+      setSplitCash('');
+      return;
+    }
+    const momoVal = parseFloat(val);
+    if (isNaN(momoVal)) return;
+    const remaining = total - momoVal;
+    if (remaining > 0) {
+      setSplitCash(parseFloat(remaining.toFixed(2)).toString());
+    } else {
+      setSplitCash('0');
+    }
+  };
+
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [stockWarnings, setStockWarnings] = useState<string[]>([]);
@@ -33,6 +68,10 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
     items, customerId, customerName, discountAmount, discountType, grandTotal, taxBreakdown,
     orderType, orderNote 
   } = useCartStore();
+
+  useEffect(() => {
+    void useCartStore.getState().refreshStockLevels();
+  }, []);
 
   // Load customer details when needed
   useEffect(() => {
@@ -175,8 +214,10 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
         payment_method: method,
         discount_amount: discountAmount,
         discount_type: discountType,
-        amount_tendered: method === 'cash' ? tendered : method === 'credit' ? 0 : total,
-        momo_reference: method === 'momo' ? `MOMO-${Date.now()}` : undefined,
+        amount_tendered: method === 'cash' ? tendered : method === 'split' ? ((parseFloat(splitCash) || 0) + (parseFloat(splitMomo) || 0)) : method === 'credit' ? 0 : total,
+        split_cash: method === 'split' ? (parseFloat(splitCash) || 0) : undefined,
+        split_momo: method === 'split' ? (parseFloat(splitMomo) || 0) : undefined,
+        momo_reference: (method === 'momo' || method === 'split') ? `MOMO-${Date.now()}` : undefined,
         order_type: orderType,
         order_note: orderNote,
       });
@@ -299,12 +340,17 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
 
   const canComplete = () => {
     if (method === 'cash') return tendered >= total;
+    if (method === 'split') {
+      const sc = parseFloat(splitCash) || 0;
+      const sm = parseFloat(splitMomo) || 0;
+      return (sc + sm) >= total;
+    }
     if (method === 'credit') return hasCreditCustomer();
     return true;
   };
 
   return (
-    <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className={styles.overlay}>
       <div className={styles.modal}>
         {/* Header */}
         <div className={styles.header}>
@@ -331,7 +377,7 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
             {[
               { id: 'cash', label: 'Cash', icon: '💵', desc: 'Physical currency' },
               { id: 'momo', label: 'Mobile Money', icon: '📱', desc: 'MTN, Telecel, AirtelTigo' },
-              { id: 'card', label: 'Card', icon: '💳', desc: 'Debit / Credit card' },
+              { id: 'split', label: 'Both (Cash & MoMo)', icon: '💵📱', desc: 'Split payment' },
               { id: 'credit', label: 'Credit', icon: '📋', desc: 'Add to customer balance' },
             ].map(m => (
               <button
@@ -404,17 +450,52 @@ export default function PaymentModal({ onClose, onComplete }: Props) {
           </div>
         )}
 
-        {/* Card */}
-        {step === 'card' && (
-          <div className={styles.cardStep}>
-            <div className={styles.cardIcon}>💳</div>
-            <p className={styles.momoTitle}>Card Payment</p>
-            <p className={styles.momoSubtitle}>Amount: {useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</p>
-            <div className={styles.cardInstructions}>
-              <p>1. Insert or tap customer's card on the POS terminal</p>
-              <p>2. Customer enters PIN if prompted</p>
-              <p>3. Confirm transaction on terminal, then click confirm</p>
+        {/* Split */}
+        {step === 'split' && (
+          <div className={styles.cashStep}>
+            <div className={styles.momoIcon}>💵📱</div>
+            <p className={styles.momoTitle}>Both (Cash & MoMo)</p>
+            <p className={styles.momoSubtitle}>Total Due: {useAuthStore.getState().receiptConfig.currency} {formatCurrency(total)}</p>
+            
+            <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
+              <label className={styles.inputLabel}>Cash Amount Received</label>
+              <div className={styles.inputWrap}>
+                <span className={styles.inputPrefix}>{useAuthStore.getState().receiptConfig.currency}</span>
+                <input
+                  autoFocus
+                  className={styles.amountInput}
+                  type="number"
+                  placeholder="0.00"
+                  value={splitCash}
+                  onChange={e => handleSplitCashChange(e.target.value)}
+                  min={0}
+                  step={0.01}
+                />
+              </div>
             </div>
+            
+            <div className={styles.inputGroup} style={{ marginTop: '16px' }}>
+              <label className={styles.inputLabel}>MoMo Amount Received</label>
+              <div className={styles.inputWrap}>
+                <span className={styles.inputPrefix}>{useAuthStore.getState().receiptConfig.currency}</span>
+                <input
+                  className={styles.amountInput}
+                  type="number"
+                  placeholder="0.00"
+                  value={splitMomo}
+                  onChange={e => handleSplitMomoChange(e.target.value)}
+                  min={0}
+                  step={0.01}
+                />
+              </div>
+            </div>
+            
+            {((parseFloat(splitCash) || 0) + (parseFloat(splitMomo) || 0)) > 0 && (
+              <div className={`${styles.changeDisplay} ${((parseFloat(splitCash) || 0) + (parseFloat(splitMomo) || 0) - total) > 0 ? styles.changePositive : ''}`} style={{ marginTop: '24px' }}>
+                <span>{((parseFloat(splitCash) || 0) + (parseFloat(splitMomo) || 0) - total) > 0 ? 'Give Change (Cash):' : ((parseFloat(splitCash) || 0) + (parseFloat(splitMomo) || 0)) >= total ? '✓ Exact amount' : 'Insufficient'}</span>
+                {((parseFloat(splitCash) || 0) + (parseFloat(splitMomo) || 0) - total) > 0 && <span className={styles.changeAmount}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(((parseFloat(splitCash) || 0) + (parseFloat(splitMomo) || 0) - total))}</span>}
+              </div>
+            )}
           </div>
         )}
 

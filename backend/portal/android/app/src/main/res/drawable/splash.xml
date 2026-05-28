@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Dark background matching desktop #0C0C0F -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0C0C0F" />
+        </shape>
+    </item>
+
+    <!-- Subtle radial gold glow at center -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="200%"
+                android:startColor="#14D4A017"
+                android:endColor="#000C0C0F"
+                android:centerX="0.5"
+                android:centerY="0.5" />
+        </shape>
+    </item>
+
+    <!-- Gold ring circle border -->
+    <item
+        android:gravity="center"
+        android:width="120dp"
+        android:height="120dp">
+        <shape android:shape="oval">
+            <stroke
+                android:width="3dp"
+                android:color="#D4A017" />
+            <solid android:color="#00000000" />
+        </shape>
+    </item>
+
+    <!-- Inner ₵ symbol — rendered as a centered text via a solid filled oval with the cedi character -->
+    <!-- Android drawables can't embed text, so we use the ic_launcher foreground approach -->
+    <!-- The app icon (₵ monogram) is centered inside the ring via the mipmap launcher icon -->
+
+</layer-list>

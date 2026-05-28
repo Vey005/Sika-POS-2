@@ -528,5 +528,3 @@
 }
 .saveBtn:hover:not(:disabled) { background: var(--color-gold-light); }
 .saveBtn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* =====================================================

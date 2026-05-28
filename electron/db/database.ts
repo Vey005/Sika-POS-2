@@ -374,6 +374,99 @@ function runMigrations(db: Database.Database) {
     INSERT OR IGNORE INTO settings (key, value) VALUES ('expiry_alert_months_default', '3');
   `);
 
+  // V027 — Split Payments (Cash + MoMo)
+  applyMigration(27, `
+    ALTER TABLE transactions ADD COLUMN split_cash REAL NOT NULL DEFAULT 0;
+    ALTER TABLE transactions ADD COLUMN split_momo REAL NOT NULL DEFAULT 0;
+  `);
+
+  // V028 — Compound index on sync_queue status, priority, and id
+  applyMigration(28, `
+    CREATE INDEX IF NOT EXISTS idx_sync_queue_status_priority_id ON sync_queue(status, priority, id);
+  `);
+
+  // V029 — Restock Invoices (purchase/receiving)
+  applyMigration(29, `
+    CREATE TABLE IF NOT EXISTS restock_invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_number TEXT NOT NULL,
+      supplier_name TEXT,
+      notes TEXT,
+      is_paid INTEGER NOT NULL DEFAULT 0,
+      total_cost REAL NOT NULL DEFAULT 0,
+      total_items INTEGER NOT NULL DEFAULT 0,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_restock_invoices_date ON restock_invoices(created_at);
+
+    CREATE TABLE IF NOT EXISTS restock_invoice_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES restock_invoices(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id),
+      product_name TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 0,
+      cost_price REAL NOT NULL DEFAULT 0,
+      expiry_date TEXT,
+      batch_number TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_restock_items_invoice ON restock_invoice_items(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_restock_items_product ON restock_invoice_items(product_id);
+  `);
+
+  // V030 — Product Batches (per-lot stock tracking with FEFO)
+  applyMigration(30, `
+    CREATE TABLE IF NOT EXISTS product_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      batch_number TEXT,
+      expiry_date TEXT,
+      cost_price REAL NOT NULL DEFAULT 0,
+      stock_qty INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_batches_product ON product_batches(product_id);
+    CREATE INDEX IF NOT EXISTS idx_product_batches_fefo ON product_batches(product_id, expiry_date);
+
+    -- Auto-migrate: Create a "Legacy" batch for every product that already has stock
+    INSERT INTO product_batches (product_id, batch_number, expiry_date, cost_price, stock_qty)
+    SELECT id, batch_number, expiry_date, cost_price, stock_qty
+    FROM products
+    WHERE stock_qty > 0 AND is_active = 1;
+  `);
+
+  // V031 — Track which batches were depleted per transaction (for accurate reversal)
+  applyMigration(31, `
+    CREATE TABLE IF NOT EXISTS transaction_batch_depletions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transaction_id INTEGER NOT NULL,
+      batch_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      quantity REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_txn_batch_depl_txn ON transaction_batch_depletions(transaction_id);
+  `);
+
+  // V032 — Repair products whose cached stock_qty has no backing batch rows (manual inventory edits)
+  applyMigration(32, `
+    INSERT INTO product_batches (product_id, batch_number, expiry_date, cost_price, stock_qty)
+    SELECT p.id, p.batch_number, p.expiry_date, p.cost_price, p.stock_qty
+    FROM products p
+    WHERE p.is_active = 1
+      AND p.stock_qty > 0
+      AND COALESCE((
+        SELECT SUM(b.stock_qty) FROM product_batches b WHERE b.product_id = p.id
+      ), 0) <= 0;
+  `);
+
+  // V033 — Link restock lines to the batch they created (for delete reversal)
+  applyMigration(33, `
+    ALTER TABLE restock_invoice_items ADD COLUMN batch_id INTEGER REFERENCES product_batches(id);
+  `);
+
   // --- SCHEMA HARDENING ---
   // Ensure critical columns exist even if migrations were skipped/corrupted
   const harden = (table: string, column: string, type: string) => {
@@ -397,6 +490,9 @@ function runMigrations(db: Database.Database) {
   harden('users', 'cashier_nav_visibility', 'TEXT');
   harden('products', 'stock_unit', "TEXT NOT NULL DEFAULT 'single'");
   harden('products', 'expiry_alert_months', 'INTEGER');
+  harden('transactions', 'split_cash', 'REAL NOT NULL DEFAULT 0');
+  harden('transactions', 'split_momo', 'REAL NOT NULL DEFAULT 0');
+  harden('restock_invoice_items', 'batch_id', 'INTEGER REFERENCES product_batches(id)');
 }
 
 

@@ -154,6 +154,13 @@
   grid-template-columns: 1fr 30px 60px 70px;
   gap: 8px;
   align-items: baseline;
+  padding: 6px 0;
+}
+
+.itemDivider {
+  border: none;
+  border-top: 1px dotted #bbb;
+  margin: 2px 0 4px;
 }
 
 .itemName {

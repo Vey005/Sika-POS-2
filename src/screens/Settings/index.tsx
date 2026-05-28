@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useAuthStore } from '../../store/auth';
+import { useAuthStore, type ReceiptConfig } from '../../store/auth';
 import {
   CASHIER_NAV_TAB_IDS,
   mergeCashierNavVisibility,
@@ -11,12 +11,14 @@ import { CLOUD_SERVER_URL } from '../../config';
 import { showAlert, showConfirm } from '../../store/dialogStore';
 import { formatErrorMsg } from '../../utils/errorFormatter';
 import AppUpdatePanel from '../../components/settings/AppUpdatePanel';
+import ReceiptPreviewModal from '../../components/pos/ReceiptPreviewModal';
 import styles from './Settings.module.css';
 
 
 const CASHIER_NAV_LABELS: Record<CashierNavTabId, string> = {
   pos: 'POS',
   inventory: 'Inventory',
+  restock: 'Restock',
   customers: 'Customers',
   dashboard: 'Dashboard',
   reports: 'Reports',
@@ -63,7 +65,9 @@ export default function SettingsScreen() {
     { id: 'getfund', name: 'GETFund', rate: 2.5 },
     { id: 'covid', name: 'COVID Levy', rate: 1.0 }
   ]);
-  const [receiptConfig, setReceiptConfig] = useState({
+  const [taxEnabled, setTaxEnabled] = useState(true);
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false);
+  const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>({
     showLogo: true,
     showCashier: true,
     showCustomer: true,
@@ -77,6 +81,7 @@ export default function SettingsScreen() {
     showBarcode: true,
     currency: 'GH₵',
     paperSize: '80mm',
+    template: 'standard',
   });
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingPrinters, setLoadingPrinters] = useState(false);
@@ -124,6 +129,9 @@ export default function SettingsScreen() {
       }));
       if (biz.tax_config) {
         try { setTaxConfig(JSON.parse(biz.tax_config)); } catch(e) {}
+      }
+      if (biz.tax_enabled !== undefined) {
+        setTaxEnabled(biz.tax_enabled === 'true' || biz.tax_enabled === '1');
       }
       if (biz.receipt_config) {
         try { setReceiptConfig(rc => ({ ...rc, ...JSON.parse(biz.receipt_config) })); } catch(e) {}
@@ -175,6 +183,7 @@ export default function SettingsScreen() {
         sms_sender_id: settings.sms_sender_id,
         custom_categories: settings.custom_categories,
         tax_config: JSON.stringify(taxConfig),
+        tax_enabled: String(taxEnabled),
         receipt_config: JSON.stringify(receiptConfig),
         cashier_nav_visibility: JSON.stringify(cashierNav),
         expiry_alert_months_default: settings.expiry_alert_months_default,
@@ -183,6 +192,7 @@ export default function SettingsScreen() {
       setBusinessInfo(settings.business_name);
       useAuthStore.getState().setReceiptFooter(settings.receipt_footer);
       useAuthStore.getState().setTaxConfig(taxConfig);
+      useAuthStore.getState().setTaxEnabled(taxEnabled);
       useAuthStore.getState().setReceiptConfig(receiptConfig);
       useAuthStore.getState().setCashierNavVisibility(cashierNav);
 
@@ -304,42 +314,15 @@ export default function SettingsScreen() {
     if (!window.sikapos) return;
     setExporting(true);
     try {
-      const allProducts = await window.sikapos.inventory.getAll({ limit: 99999 });
-      if (!allProducts || allProducts.length === 0) {
-        await showAlert('No products found in inventory to export.');
-        return;
+      const result = await window.sikapos.inventory.exportInventory();
+      if (result.success) {
+        window.sikapos.notifications.show(
+          'Export Complete',
+          `${result.count} products exported (same columns as import template).`
+        );
+      } else if (result.message && result.message !== 'Export cancelled') {
+        await showAlert(result.message);
       }
-
-      // Build CSV content
-      const headers = ['Name', 'Barcode', 'Category', 'Unit Price', 'Cost Price', 'Stock Qty', 'Low Stock Threshold', 'Tax Category', 'Unit', 'Active'];
-      const rows = allProducts.map((p: any) => [
-        `"${(p.name || '').replace(/"/g, '""')}"`,
-        `"${p.barcode || ''}"`,
-        `"${p.category || 'General'}"`,
-        p.unit_price ?? p.price ?? 0,
-        p.cost_price ?? 0,
-        p.stock_qty ?? p.stock ?? 0,
-        p.low_stock_threshold ?? 0,
-        `"${p.tax_category || 'standard'}"`,
-        `"${p.unit || 'piece'}"`,
-        p.is_active !== undefined ? (p.is_active ? 'Yes' : 'No') : 'Yes',
-      ].join(','));
-
-      const csv = [headers.join(','), ...rows].join('\n');
-
-      // Trigger download
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const dateStr = new Date().toISOString().split('T')[0];
-      link.download = `SikaPOS_Inventory_${dateStr}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      window.sikapos.notifications.show('Export Complete', `${allProducts.length} products exported to CSV.`);
     } catch (err: any) {
       console.error('Export error:', err);
       await showAlert(`Export failed: ${formatErrorMsg(err)}`);
@@ -531,7 +514,36 @@ export default function SettingsScreen() {
                 </div>
                 <div>
                   <h3 className={styles.cardTitle}>Taxes & Levies</h3>
-                  <p className={styles.cardDesc}>Customize the names and percentages of applied taxes. Set rate to 0 to disable.</p>
+                  <p className={styles.cardDesc}>Enable or disable sales tax for all products. Customize tax names and rates below.</p>
+                </div>
+              </div>
+              {/* Global tax enabled toggle */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '14px 16px',
+                background: taxEnabled ? 'rgba(34, 197, 94, 0.08)' : 'var(--color-surface)',
+                border: `1px solid ${taxEnabled ? 'rgba(34, 197, 94, 0.3)' : 'var(--color-border)'}`,
+                borderRadius: 'var(--radius-md)',
+                marginBottom: '16px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }} onClick={() => setTaxEnabled(!taxEnabled)}>
+                <input
+                  type="checkbox"
+                  checked={taxEnabled}
+                  onChange={e => setTaxEnabled(e.target.checked)}
+                  onClick={e => e.stopPropagation()}
+                  style={{ accentColor: 'var(--color-gold)', width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: '14px', color: 'var(--color-text-primary)' }}>
+                    Apply sales tax to all products
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                    When enabled, VAT, NHIL, GETFund and COVID levy are added to every sale. When disabled, no tax is charged.
+                  </p>
                 </div>
               </div>
               <div className={styles.formGrid}>
@@ -580,17 +592,25 @@ export default function SettingsScreen() {
                 </div>
               </div>
               <div style={{ padding: '0 0 4px' }}>
-                <div className={styles.formGrid} style={{ gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className={styles.formGrid} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
                   <div className={styles.formField}>
                     <label>Currency Symbol</label>
                     <input value={receiptConfig.currency} onChange={e => setReceiptConfig(rc => ({ ...rc, currency: e.target.value }))} placeholder="GH₵" />
                   </div>
                   <div className={styles.formField}>
                     <label>Paper Size</label>
-                    <select value={receiptConfig.paperSize || '80mm'} onChange={e => setReceiptConfig(rc => ({ ...rc, paperSize: e.target.value }))}>
+                    <select className={styles.select} value={receiptConfig.paperSize || '80mm'} onChange={e => setReceiptConfig(rc => ({ ...rc, paperSize: e.target.value }))}>
                       <option value="80mm">80mm (Standard)</option>
                       <option value="58mm">58mm (Small)</option>
                       <option value="40mm">40mm (Extra Small)</option>
+                    </select>
+                  </div>
+                  <div className={styles.formField}>
+                    <label>Receipt Template</label>
+                    <select className={styles.select} value={receiptConfig.template || 'standard'} onChange={e => setReceiptConfig(rc => ({ ...rc, template: e.target.value as any }))}>
+                      <option value="standard">Standard / Classic</option>
+                      <option value="compact">Compact (Eco-friendly)</option>
+                      <option value="elegant">Elegant (Premium)</option>
                     </select>
                   </div>
                 </div>
@@ -631,6 +651,24 @@ export default function SettingsScreen() {
                     </label>
                   ))}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowReceiptPreview(true)}
+                  style={{
+                    marginTop: '16px',
+                    width: '100%',
+                    padding: '12px 16px',
+                    background: 'var(--color-gold-dim)',
+                    border: '1px solid var(--color-gold)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--color-gold)',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Preview receipt design (no printer needed)
+                </button>
               </div>
             </div>
 
@@ -974,7 +1012,7 @@ export default function SettingsScreen() {
                 <div style={{ padding: '16px', background: 'rgba(16,185,129,0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16,185,129,0.15)' }}>
                   <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>📦 Export Inventory</h4>
                   <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                    Download all your products as a CSV file. Useful for backup, reporting, or importing to another system.
+                    Export all products with the same columns as the Inventory import template (pack, expiry, tax, stock fields). CSV or Excel — re-import via Inventory → Import.
                   </p>
                   <button
                     type="button"
@@ -984,7 +1022,7 @@ export default function SettingsScreen() {
                     disabled={exporting}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    {exporting ? 'Exporting...' : 'Export All Products to CSV'}
+                    {exporting ? 'Exporting...' : 'Export All Products'}
                   </button>
                 </div>
 
@@ -1031,8 +1069,8 @@ export default function SettingsScreen() {
 
       {/* Staff Modal */}
       {showStaffModal && editingStaff && (
-        <div className={styles.modalOverlay} onClick={() => { setShowStaffModal(false); setEditingStaff(null); }}>
-          <div className={styles.modalCard} onClick={e => e.stopPropagation()}>
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalCard}>
             <div className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>{editingStaff.id ? 'Edit Staff Member' : 'Add New Staff'}</h2>
               <button className={styles.modalClose} onClick={() => { setShowStaffModal(false); setEditingStaff(null); }}>×</button>
@@ -1139,6 +1177,10 @@ export default function SettingsScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {showReceiptPreview && (
+        <ReceiptPreviewModal onClose={() => setShowReceiptPreview(false)} />
       )}
     </div>
   );

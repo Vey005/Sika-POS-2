@@ -1,4 +1,5 @@
 import { getReceiptPaymentDisplay } from '../utils/receipt-payment';
+import { thermalDottedLine } from '../utils/receipt-layout';
 
 export function buildReceiptBytes(receiptData: any): Buffer {
   const buffers: Buffer[] = [];
@@ -6,6 +7,10 @@ export function buildReceiptBytes(receiptData: any): Buffer {
   const cur = receiptData.currency || 'GHS';
   const paperSize = cfg.paperSize || '80mm';
   const lineLen = paperSize === '80mm' ? 48 : paperSize === '58mm' ? 32 : 24;
+
+  const template = cfg.template || 'standard';
+  const isCompact = template === 'compact';
+  const isElegant = template === 'elegant';
 
   // Most thermal printers don't support the Cedi symbol (₵) in their default code pages.
   // We'll use GHS for the printer to ensure it prints correctly, while keeping the symbol in the UI.
@@ -19,19 +24,24 @@ export function buildReceiptBytes(receiptData: any): Buffer {
   
   if (receiptData.logoBuffer) {
     buffers.push(receiptData.logoBuffer);
-    buffers.push(Buffer.from('\n'));
+    if (!isCompact) {
+      buffers.push(Buffer.from('\n'));
+    }
   }
 
-  // Print business name (Double height/width)
-  // GS ! 0x11 (Double Width & Height)
-  // When using double width, each character takes 2 slots
+  // Print business name
   const bizName = receiptData.businessName || '';
+  const displayBizName = isElegant ? `* ${bizName.toUpperCase()} *` : bizName;
   const bizNameWidth = paperSize === '40mm' ? 24 : lineLen; // Use full width for 40mm
-  const paddingSlots = Math.max(0, Math.floor((bizNameWidth - (bizName.length * 2)) / 2));
-  const bizPadding = ' '.repeat(Math.floor(paddingSlots / 2)); // Divide by 2 because spaces will also be doubled if we send them after GS !
+  const paddingSlots = Math.max(0, Math.floor((bizNameWidth - (displayBizName.length * 2)) / 2));
+  const bizPadding = ' '.repeat(Math.max(0, Math.floor(paddingSlots / 2))); // Divide by 2 because spaces will also be doubled if we send them after GS !
 
-  buffers.push(Buffer.from([0x1D, 0x21, 0x11]));
-  buffers.push(Buffer.from(bizPadding + bizName + '\n'));
+  if (isCompact) {
+    buffers.push(Buffer.from([0x1D, 0x21, 0x10])); // Double Width only
+  } else {
+    buffers.push(Buffer.from([0x1D, 0x21, 0x11])); // Double Width & Height
+  }
+  buffers.push(Buffer.from(bizPadding + displayBizName + '\n'));
 
   // Reset text size
   buffers.push(Buffer.from([0x1D, 0x21, 0x00]));
@@ -45,11 +55,12 @@ export function buildReceiptBytes(receiptData: any): Buffer {
   if (cfg.showTIN !== false && receiptData.tin) {
     buffers.push(Buffer.from(centerText(`TIN: ${receiptData.tin}`, lineLen) + '\n'));
   }
-  buffers.push(Buffer.from('\n'));
+  if (!isCompact) {
+    buffers.push(Buffer.from('\n'));
+  }
 
   // Alignment: Always Left for metadata details as requested
   buffers.push(Buffer.from([0x1B, 0x61, 0x00]));
-
 
   buffers.push(Buffer.from(`Receipt No: ${receiptData.receiptNumber}\n`));
   buffers.push(Buffer.from(`Date: ${receiptData.date}\n`));
@@ -70,7 +81,8 @@ export function buildReceiptBytes(receiptData: any): Buffer {
     buffers.push(Buffer.from(`Note: ${receiptData.orderNote}\n`));
   }
 
-  buffers.push(Buffer.from('-'.repeat(lineLen) + '\n'));
+  const dividerChar = isElegant ? '=' : '-';
+  buffers.push(Buffer.from(dividerChar.repeat(lineLen) + '\n'));
 
   // Items Table Header (Unified column design)
   let nameWidth, qtyWidth, priceWidth, totalWidth;
@@ -88,10 +100,12 @@ export function buildReceiptBytes(receiptData: any): Buffer {
     buffers.push(Buffer.from([0x1B, 0x61, 0x00]));
     buffers.push(Buffer.from('ITEM      QT PRICE TOTAL\n'));
   }
-  buffers.push(Buffer.from('-'.repeat(lineLen) + '\n'));
+  buffers.push(Buffer.from(dividerChar.repeat(lineLen) + '\n'));
 
   // Items (Unified column layout)
-  for (const item of receiptData.items) {
+  const itemList = receiptData.items || [];
+  for (let itemIndex = 0; itemIndex < itemList.length; itemIndex++) {
+    const item = itemList[itemIndex];
     const saleUnitText = item.saleUnitLabel ? ` [${item.saleUnitLabel}]` : '';
     const itemName = item.size ? `${item.name} (${item.size})${saleUnitText}` : `${item.name}${saleUnitText}`;
     const nameLines = wrapText(itemName, nameWidth);
@@ -107,9 +121,13 @@ export function buildReceiptBytes(receiptData: any): Buffer {
     for (let i = 1; i < nameLines.length; i++) {
       buffers.push(Buffer.from(`${nameLines[i]}\n`));
     }
+
+    if (itemIndex < itemList.length - 1 && !isCompact) {
+      buffers.push(Buffer.from(thermalDottedLine(lineLen) + '\n'));
+    }
   }
 
-  buffers.push(Buffer.from('-'.repeat(lineLen) + '\n'));
+  buffers.push(Buffer.from(dividerChar.repeat(lineLen) + '\n'));
 
   // Totals
   const printTotalRow = (label: string, amount: string, bold = false) => {
@@ -133,11 +151,17 @@ export function buildReceiptBytes(receiptData: any): Buffer {
     printTotalRow('Discount:', `-${printerCur} ${receiptData.discount.toFixed(2)}`);
   }
   
+  if (isElegant) {
+    buffers.push(Buffer.from([0x1B, 0x45, 0x01])); // Bold on
+    buffers.push(Buffer.from(dividerChar.repeat(lineLen) + '\n'));
+    buffers.push(Buffer.from([0x1B, 0x45, 0x00])); // Bold off
+  }
+
   buffers.push(Buffer.from([0x1D, 0x21, 0x01])); // Double height
   printTotalRow(`TOTAL ${printerCur}:`, `${printerCur} ${receiptData.total.toFixed(2)}`, true);
   buffers.push(Buffer.from([0x1D, 0x21, 0x00])); // Reset size
 
-  buffers.push(Buffer.from('-'.repeat(lineLen) + '\n'));
+  buffers.push(Buffer.from(dividerChar.repeat(lineLen) + '\n'));
 
   // Payment (credit / reversed / void / cash-momo-card)
   const paymentDisplay = getReceiptPaymentDisplay({
@@ -161,7 +185,9 @@ export function buildReceiptBytes(receiptData: any): Buffer {
     printTotalRow(`${line.label}:`, line.value, Boolean(line.emphasize));
   }
 
-  buffers.push(Buffer.from('\n'));
+  if (!isCompact) {
+    buffers.push(Buffer.from('\n'));
+  }
 
   // Footer (Manual Centering - Pushed Extreme Left)
   const fontBLineLen = Math.floor(lineLen * 1.375);
@@ -171,6 +197,9 @@ export function buildReceiptBytes(receiptData: any): Buffer {
   buffers.push(Buffer.from([0x1B, 0x24, 0x00, 0x00])); // Set absolute position 0
   buffers.push(Buffer.from([0x1B, 0x4D, 0x01])); // Select Font B (Small)
   
+  if (isElegant) {
+    buffers.push(Buffer.from(centerText('* * *', adjustedFontBWidth) + '\n'));
+  }
   buffers.push(Buffer.from(centerText(receiptData.footerMessage || 'Thanks For Shopping with us', adjustedFontBWidth) + '\n'));
   
   if (cfg.showPoweredBy !== false) {
@@ -180,15 +209,15 @@ export function buildReceiptBytes(receiptData: any): Buffer {
   }
   buffers.push(Buffer.from([0x1B, 0x4D, 0x00])); // Reset Font
 
-    // Barcode (Shifted 1cm Right)
-    if (cfg.showBarcode !== false && receiptData.receiptNumber) {
-      buffers.push(Buffer.from([0x1B, 0x61, 0x00])); // Left align
-      
-      // Set approx 1cm left margin (80 dots at 203 DPI)
-      const margin = paperSize === '40mm' ? 60 : 80;
-      buffers.push(Buffer.from([0x1D, 0x4C, margin, 0])); 
-      
-      buffers.push(Buffer.from('\n'));
+  // Barcode (Shifted 1cm Right)
+  if (cfg.showBarcode !== false && receiptData.receiptNumber) {
+    buffers.push(Buffer.from([0x1B, 0x61, 0x00])); // Left align
+    
+    // Set approx 1cm left margin (80 dots at 203 DPI)
+    const margin = paperSize === '40mm' ? 60 : 80;
+    buffers.push(Buffer.from([0x1D, 0x4C, margin, 0])); 
+    
+    buffers.push(Buffer.from('\n'));
     // GS h 60: Set barcode height to 60 dots (reduced from 80)
     buffers.push(Buffer.from([0x1D, 0x68, 60]));
     // GS w 1: Use narrower width for small paper sizes
@@ -211,7 +240,11 @@ export function buildReceiptBytes(receiptData: any): Buffer {
     buffers.push(Buffer.from([0x1D, 0x4C, 0, 0]));
   }
   
-  buffers.push(Buffer.from('\n\n\n\n'));
+  if (isCompact) {
+    buffers.push(Buffer.from('\n\n'));
+  } else {
+    buffers.push(Buffer.from('\n\n\n\n'));
+  }
 
   // Paper cut command: GS V 0
   buffers.push(Buffer.from([0x1D, 0x56, 0x00]));
@@ -271,15 +304,11 @@ export function buildReportBytes(reportData: any): Buffer {
   buffers.push(Buffer.from([0x1D, 0x21, 0x11]));
   buffers.push(Buffer.from((reportData.businessName || 'SikaPOS') + '\n'));
   
-  // Report Title
+  // Report Title (same layout for daily EOD and shift attendance reports)
   buffers.push(Buffer.from([0x1D, 0x21, 0x01])); // Double height
-  if (reportData.isShiftReport) {
-    buffers.push(Buffer.from('SHIFT SUMMARY REPORT\n'));
-  } else {
-    buffers.push(Buffer.from('END OF DAY REPORT\n'));
-  }
-  
-  // Metadata (Date, Cashier)
+  buffers.push(Buffer.from('END OF DAY REPORT\n'));
+
+  // Metadata (date, optional staff / shift)
   buffers.push(Buffer.from([0x1D, 0x21, 0x00])); // Reset size
   buffers.push(Buffer.from(`Date: ${reportData.date}\n`));
   if (reportData.cashierName) {
@@ -287,6 +316,9 @@ export function buildReportBytes(reportData: any): Buffer {
   }
   if (reportData.shiftDuration) {
     buffers.push(Buffer.from(`Duration: ${reportData.shiftDuration}\n`));
+  }
+  if (reportData.shiftTimeRange) {
+    buffers.push(Buffer.from(`${reportData.shiftTimeRange}\n`));
   }
   buffers.push(Buffer.from('-'.repeat(lineLen) + '\n'));
 

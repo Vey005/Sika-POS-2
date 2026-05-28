@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/auth';
+import { getApiUrl } from '../config/api';
 import {
   Users,
   Search,
@@ -28,6 +29,11 @@ export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit] = useState(25);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalDebt, setTotalDebt] = useState(0);
   
   // Payment Modal State
   const [showPayModal, setShowPayModal] = useState(false);
@@ -37,21 +43,37 @@ export default function Customers() {
   const [payNote, setPayNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1); // Reset page on new search
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/portal/customers', {
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        search: debouncedSearch
+      });
+      const res = await fetch(getApiUrl(`/api/portal/customers?${queryParams}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch customers');
       const data = await res.json();
-      setCustomers(data || []);
+      setCustomers(data.customers || []);
+      setTotalDebt(data.totalDebt || 0);
+      setTotalPages(data.pagination?.pages || 1);
     } catch (err: any) {
       console.error('Customer fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, page, limit, debouncedSearch]);
 
   useEffect(() => {
     fetchCustomers();
@@ -61,7 +83,7 @@ export default function Customers() {
     if (!payCustomer || !payAmount) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/portal/customers/${payCustomer.id}/pay`, {
+      const res = await fetch(getApiUrl(`/api/portal/customers/${payCustomer.id}/pay`), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -90,39 +112,32 @@ export default function Customers() {
     }
   };
 
-  const filtered = customers.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (c.phone || '').includes(searchQuery)
-  );
-
   const formatCurrency = (val: number) =>
     `GHS ${(val || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const totalDebt = customers.reduce((s, c) => s + (c.credit_balance || 0), 0);
-
   return (
     <div>
-      {/* Header */}
-      <div style={{ marginBottom: 'clamp(16px, 4vw, 24px)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'clamp(16px, 4vw, 20px)', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h1 style={{ fontSize: 'clamp(20px, 5vw, 28px)', marginBottom: '4px' }}>Customers</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: 'clamp(12px, 3vw, 14px)' }}>
-              Manage your customers and track debts
-            </p>
-          </div>
+      <div className="page-header">
+        <div>
+          <h1>Customers</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Manage customers and track debts</p>
+        </div>
+        <div className="page-actions">
           <button onClick={fetchCustomers} className="btn-secondary">
             <RefreshCw size={16} /> Refresh
           </button>
         </div>
+      </div>
 
-        {/* Debt Summary Card */}
-        <div className="glass-panel" style={{ 
-          padding: '20px', 
-          marginBottom: '24px', 
+      <div
+        className="glass-panel"
+        style={{
+          padding: 20,
+          marginBottom: 16,
           background: 'linear-gradient(135deg, rgba(212, 160, 23, 0.1) 0%, rgba(0,0,0,0) 100%)',
-          borderLeft: '4px solid var(--primary)'
-        }}>
+          borderLeft: '4px solid var(--primary)',
+        }}
+      >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ padding: '10px', background: 'rgba(212, 160, 23, 0.2)', borderRadius: '12px', color: 'var(--primary)' }}>
               <CreditCard size={24} />
@@ -134,37 +149,112 @@ export default function Customers() {
           </div>
         </div>
 
-        {/* Filter Bar */}
-        <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 16px)' }}>
-          <div style={{ position: 'relative', maxWidth: '400px' }}>
-            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input
-              type="text"
-              placeholder="Search by name or phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px 10px 40px',
-                background: 'rgba(0,0,0,0.2)',
-                border: '1px solid var(--border-light)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-main)',
-                outline: 'none',
-              }}
-            />
-          </div>
+      <div className="glass-panel" style={{ padding: 16, marginBottom: 16 }}>
+        <div className="filter-search" style={{ maxWidth: '100%' }}>
+          <Search
+            size={18}
+            style={{
+              position: 'absolute',
+              left: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="search"
+            className="portal-input"
+            placeholder="Search name or phone…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 
-      {/* Customers Table */}
-      <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center' }}>
+          <div style={{ padding: 60, textAlign: 'center' }}>
             <RefreshCw size={32} className="spin" style={{ opacity: 0.5 }} />
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <>
+            <div className="portal-card-list">
+              {customers.map((customer) => (
+                <div key={customer.id} className="data-card animate-fade-in" style={{ marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 14,
+                          background: 'linear-gradient(135deg, var(--primary) 0%, #e8b820 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 800,
+                          color: '#000',
+                          fontSize: '20px',
+                          boxShadow: 'var(--elevation-1)',
+                        }}
+                      >
+                        {customer.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-main)' }}>{customer.name}</div>
+                        {customer.phone && (
+                          <div style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, marginTop: '2px' }}>
+                            <Phone size={12} style={{ color: 'var(--primary)' }} /> {customer.phone}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: 'rgba(0,0,0,0.15)', padding: '14px', borderRadius: '14px', border: '1px solid var(--border-light)' }}>
+                    <div>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '4px' }}>Debt Balance</p>
+                      {customer.credit_balance > 0 ? (
+                        <p style={{ color: 'var(--danger)', fontWeight: 800, fontSize: '16px' }}>
+                          {formatCurrency(customer.credit_balance)}
+                        </p>
+                      ) : (
+                        <p style={{ color: 'var(--success)', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckCircle2 size={14} /> Cleared
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '4px' }}>Total Spent</p>
+                      <p style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-main)' }}>{formatCurrency(customer.total_spent)}</p>
+                    </div>
+                  </div>
+
+                  {customer.credit_balance > 0 && (
+                    <button
+                      className="btn-primary"
+                      style={{ width: '100%', marginTop: '14px', minHeight: '48px', borderRadius: '12px' }}
+                      onClick={() => {
+                        setPayCustomer(customer);
+                        setPayAmount(customer.credit_balance.toString());
+                        setShowPayModal(true);
+                      }}
+                    >
+                      <CreditCard size={18} /> Record Debt Payment
+                    </button>
+                  )}
+                </div>
+              ))}
+              {customers.length === 0 && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Users size={40} style={{ opacity: 0.3, marginBottom: 8 }} />
+                  <p>No customers found</p>
+                </div>
+              )}
+            </div>
+
+            <div className="portal-table-wrap table-scroll">
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -176,7 +266,7 @@ export default function Customers() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((customer) => (
+                {customers.map((customer) => (
                   <tr key={customer.id} style={{ borderTop: '1px solid var(--border-light)' }}>
                     <td style={{ padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -242,7 +332,7 @@ export default function Customers() {
                     </td>
                   </tr>
                 ))}
-                {filtered.length === 0 && (
+                {customers.length === 0 && (
                   <tr>
                     <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                       <Users size={48} style={{ marginBottom: '12px', opacity: 0.3 }} />
@@ -252,23 +342,38 @@ export default function Customers() {
                 )}
               </tbody>
             </table>
-          </div>
+
+            {totalPages > 1 && (
+              <div className="pagination-bar" style={{ background: 'rgba(0,0,0,0.1)' }}>
+                <button
+                  className="btn-secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  style={{ padding: '6px 12px', fontSize: '13px' }}
+                >
+                  Previous
+                </button>
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  className="btn-secondary"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  style={{ padding: '6px 12px', fontSize: '13px' }}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+            </div>
+          </>
         )}
       </div>
 
-      {/* Pay Debt Modal */}
       {showPayModal && payCustomer && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '24px' }}>
+        <div className="modal-overlay">
+          <div className="glass-panel modal-panel">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 style={{ fontSize: '18px', margin: 0 }}>Record Payment</h2>
               <button onClick={() => setShowPayModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>

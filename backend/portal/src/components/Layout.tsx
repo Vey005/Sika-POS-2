@@ -5,47 +5,57 @@ import {
   Package,
   BarChart3,
   LogOut,
-  Menu,
-  X,
   Store,
   Users,
   User,
   ChevronDown,
   MapPin,
-  Phone
+  Phone,
+  Truck,
+  Settings as SettingsIcon,
+  Sun,
+  Moon,
 } from 'lucide-react';
+import StoreSwitcher from './StoreSwitcher';
+import RippleButton from './RippleButton';
 
 const navItems = [
   { path: '/reports', label: 'Reports', icon: BarChart3 },
   { path: '/inventory', label: 'Inventory', icon: Package },
+  { path: '/restock', label: 'Restock', icon: Truck },
   { path: '/customers', label: 'Customers', icon: Users },
+  { path: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 export default function Layout() {
-  const { 
-    businessName, 
-    businessLogo, 
-    businessAddress, 
-    businessPhone, 
-    userName, 
-    userRole, 
-    logout 
+  const {
+    businessName,
+    businessLogo,
+    businessAddress,
+    businessPhone,
+    userName,
+    userRole,
+    logout,
   } = useAuthStore();
-  
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('portal-theme') as 'light' | 'dark') || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('portal-theme', theme);
+  }, [theme]);
+
   const location = useLocation();
 
-  // The initial of the person who used their PIN (userName)
   const displayInitial = (userName?.[0] || businessName?.[0] || 'U').toUpperCase();
-  
-  // Close sidebar when route changes on mobile
+
   useEffect(() => {
-    setSidebarOpen(false);
     setDropdownOpen(false);
   }, [location.pathname]);
 
-  // Close dropdown on click outside
   useEffect(() => {
     if (!dropdownOpen) return;
     const handleClick = () => setDropdownOpen(false);
@@ -53,92 +63,27 @@ export default function Layout() {
     return () => window.removeEventListener('click', handleClick);
   }, [dropdownOpen]);
 
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)' }}>
-      {/* Mobile Sidebar Overlay */}
-      <div
-        className="no-print"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: sidebarOpen ? 'rgba(0,0,0,0.5)' : 'transparent',
-          zIndex: 40,
-          pointerEvents: sidebarOpen ? 'auto' : 'none',
-          transition: 'background 0.3s ease',
-        }}
-        onClick={() => sidebarOpen && setSidebarOpen(false)}
-      />
+  const navClass = (isActive: boolean) =>
+    `portal-nav-link${isActive ? ' active' : ''}`;
 
-      {/* Sidebar */}
-      <aside
-        className="no-print"
-        style={{
-          width: sidebarOpen ? 'min(260px, 80vw)' : '0',
-          maxWidth: '260px',
-          minWidth: sidebarOpen ? 'min(260px, 80vw)' : '0',
-          background: 'var(--bg-base)',
-          borderRight: '1px solid var(--border-light)',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'fixed',
-          left: sidebarOpen ? 0 : '-260px',
-          top: 0,
-          bottom: 0,
-          zIndex: 50,
-          transition: 'left 0.3s ease, width 0.3s ease',
-        }}
-      >
-        {/* Logo */}
-        <div style={{ padding: '24px 20px', borderBottom: '1px solid var(--border-light)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '20px',
-                fontWeight: 700,
-              }}
-            >
-              ₵
-            </div>
-            <div>
-              <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>SikaPOS</h2>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Cloud Portal</p>
-            </div>
+  return (
+    <div className="portal-shell">
+      {/* Desktop sidebar only — hidden on phone via responsive.css */}
+      <aside className="portal-sidebar no-print" aria-label="Main navigation">
+        <div className="portal-sidebar-brand">
+          <div className="portal-sidebar-logo">₵</div>
+          <div>
+            <h2>SikaPOS</h2>
+            <p>Cloud Portal</p>
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav style={{ flex: 1, padding: '16px 12px', overflowY: 'auto' }}>
+        <nav className="portal-sidebar-nav">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: 'clamp(10px, 3vw, 12px) clamp(12px, 4vw, 16px)',
-                  borderRadius: 'var(--radius-md)',
-                  color: isActive ? 'var(--primary)' : 'var(--text-muted)',
-                  background: isActive ? 'rgba(212, 160, 23, 0.1)' : 'transparent',
-                  textDecoration: 'none',
-                  marginBottom: '4px',
-                  transition: 'all 0.2s',
-                  fontWeight: 500,
-                  fontSize: 'clamp(13px, 3.5vw, 14px)',
-                  minHeight: '44px',
-                }}
-              >
+              <NavLink key={item.path} to={item.path} className={navClass(isActive)}>
                 <Icon size={20} />
                 <span>{item.label}</span>
               </NavLink>
@@ -147,265 +92,141 @@ export default function Layout() {
         </nav>
       </aside>
 
-      {/* Main Content */}
-      <main style={{ 
-        flex: 1, 
-        marginLeft: '0', 
-        transition: 'margin-left 0.3s ease', 
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100vh'
-      }}>
-        {/* Mobile Header */}
-        <header
-          className="no-print"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 'clamp(12px, 4vw, 16px) clamp(16px, 5vw, 20px)',
-            borderBottom: '1px solid var(--border-light)',
-            background: 'var(--bg-base)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 30,
-            minHeight: '60px',
-            gap: '12px',
-          }}
-        >
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-main)',
-              cursor: 'pointer',
-              padding: '12px',
-              borderRadius: 'var(--radius-sm)',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
-          >
-            {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-          
-          {/* Store Name - Top Left */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px',
-            flex: 1,
-            minWidth: 0,
-          }}>
-            <Store size={18} color="var(--primary)" />
-            <span style={{ 
-              fontSize: 'clamp(13px, 3.5vw, 15px)', 
-              fontWeight: 600, 
-              color: 'var(--text-main)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+      <main className="portal-main">
+        <header className="portal-header no-print">
+          <div className="portal-header-store">
+            <div style={{
+              width: '32px', height: '32px', borderRadius: '8px',
+              background: 'var(--primary-glow)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              border: '1px solid rgba(212,160,23,0.2)'
             }}>
-              {businessName}
-            </span>
+              <Store size={18} style={{ color: 'var(--primary)' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span className="portal-header-store-name" style={{ fontSize: '15px', lineHeight: 1.2 }}>{businessName}</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cloud Active</span>
+            </div>
+            <StoreSwitcher />
           </div>
 
-          {/* Profile Dropdown - Top Right */}
-          <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <RippleButton
+              type="button"
+              className="icon-btn portal-theme-toggle-btn"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              aria-label="Toggle theme"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '4px',
-                paddingRight: '12px',
-                background: dropdownOpen ? 'var(--bg-elevated)' : 'transparent',
-                border: '1px solid',
-                borderColor: dropdownOpen ? 'var(--border-strong)' : 'transparent',
-                borderRadius: '100px',
-                color: 'var(--text-main)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                minHeight: '44px',
-                outline: 'none',
-              }}
-            >
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--primary) 0%, #E8B820 100%)',
-                color: '#000',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid var(--border-light)',
+                borderRadius: '12px',
+                width: '40px',
+                height: '40px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '16px',
-                fontWeight: 700,
-                boxShadow: '0 0 15px rgba(212, 160, 23, 0.2)',
-              }}>
-                {displayInitial}
-              </div>
-              <ChevronDown 
-                size={16} 
-                style={{ 
-                  color: 'var(--text-muted)',
-                  transform: dropdownOpen ? 'rotate(180deg)' : 'none',
-                  transition: 'transform 0.2s ease'
-                }} 
-              />
-            </button>
+                color: theme === 'dark' ? 'var(--primary)' : 'var(--text-main)',
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            >
+              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+            </RippleButton>
 
-            {/* Dropdown Menu */}
-            {dropdownOpen && (
-              <div style={{
-                position: 'absolute',
-                top: 'calc(100% + 12px)',
-                right: 0,
-                width: '320px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-strong)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)',
-                padding: '8px',
-                zIndex: 100,
-                animation: 'fadeIn 0.2s ease-out',
-              }}>
-                {/* Profile Header / Business Info */}
-                <div style={{
-                  padding: '20px 16px',
-                  borderBottom: '1px solid var(--border-light)',
-                  marginBottom: '8px',
-                  background: 'rgba(212, 160, 23, 0.03)',
-                  borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-                }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '12px' }}>
-                    {businessLogo ? (
-                      <img 
-                        src={businessLogo} 
-                        alt="Logo" 
-                        style={{ width: '64px', height: '64px', borderRadius: '12px', objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }} 
-                      />
-                    ) : (
-                      <div style={{ 
-                        width: '64px', 
-                        height: '64px', 
-                        borderRadius: '12px', 
-                        background: 'var(--bg-elevated)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--primary)',
-                        border: '1px solid var(--border-light)'
-                      }}>
-                        <Store size={32} />
-                      </div>
-                    )}
-                    
-                    <div style={{ width: '100%' }}>
-                      <h3 style={{ 
-                        fontSize: '16px', 
-                        fontWeight: 700, 
-                        margin: '0 0 4px 0',
-                        color: 'var(--text-main)',
-                      }}>
-                        {businessName}
-                      </h3>
-                      <p style={{ 
-                        fontSize: '12px', 
-                        color: 'var(--text-muted)', 
-                        margin: '0 0 12px 0',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        fontWeight: 600
-                      }}>
-                        {userRole} Account
-                      </p>
+            <div className="portal-header-profile" onClick={(e) => e.stopPropagation()}>
+              <RippleButton
+                type="button"
+                className="icon-btn portal-profile-btn"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                aria-expanded={dropdownOpen}
+                aria-label="Account menu"
+                style={{
+                  padding: '4px 8px 4px 4px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '100px',
+                  height: '40px',
+                }}
+              >
+                <div className="portal-profile-avatar" style={{ width: '32px', height: '32px', fontSize: '14px' }}>{displayInitial}</div>
+                <ChevronDown
+                  size={14}
+                  style={{
+                    color: 'var(--text-muted)',
+                    transform: dropdownOpen ? 'rotate(180deg)' : 'none',
+                    transition: 'transform 0.2s var(--motion-standard)',
+                  }}
+                />
+              </RippleButton>
 
-                      {/* Contact Info */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-                        {businessAddress && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                            <MapPin size={14} style={{ color: 'var(--primary)' }} />
-                            <span>{businessAddress}</span>
-                          </div>
-                        )}
-                        {businessPhone && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                            <Phone size={14} style={{ color: 'var(--primary)' }} />
-                            <span>{businessPhone}</span>
-                          </div>
-                        )}
-                      </div>
+              {dropdownOpen && (
+                <div className="portal-profile-menu" onClick={(e) => e.stopPropagation()}>
+                  <div className="portal-profile-menu-header">
+                    <div className="portal-profile-menu-brand">
+                      {businessLogo ? (
+                        <img src={businessLogo} alt="" className="portal-profile-menu-logo" />
+                      ) : (
+                        <div className="portal-profile-menu-logo-placeholder">
+                          <Store size={28} />
+                        </div>
+                      )}
+                      <h3>{businessName}</h3>
+                      <p>{userRole} account</p>
+                      {businessAddress && (
+                        <div className="portal-profile-menu-meta">
+                          <MapPin size={14} color="var(--primary)" />
+                          <span>{businessAddress}</span>
+                        </div>
+                      )}
+                      {businessPhone && (
+                        <div className="portal-profile-menu-meta">
+                          <Phone size={14} color="var(--primary)" />
+                          <span>{businessPhone}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-
-                {/* User Section */}
-                <div style={{ padding: '8px' }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '12px', 
-                    padding: '10px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--bg-elevated)',
-                    marginBottom: '8px'
-                  }}>
-                    <User size={18} style={{ color: 'var(--primary)' }} />
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: '13px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>{userName || 'Administrator'}</p>
-                      <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Logged in via PIN</p>
+                  <div style={{ padding: 8 }}>
+                    <div className="portal-profile-menu-user">
+                      <User size={18} style={{ color: 'var(--primary)' }} />
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{userName || 'Administrator'}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Logged in via PIN</p>
+                      </div>
                     </div>
+                    <RippleButton type="button" className="portal-sign-out-btn" onClick={logout}>
+                      <LogOut size={18} />
+                      Sign Out
+                    </RippleButton>
                   </div>
-
-                  <div style={{ height: '1px', background: 'var(--border-light)', margin: '8px 0' }} />
-
-                  <button
-                    onClick={logout}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      background: 'transparent',
-                      border: 'none',
-                      borderRadius: 'var(--radius-md)',
-                      color: '#EF4444',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <LogOut size={18} />
-                    <span>Sign Out</span>
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <div style={{ 
-          padding: 'clamp(16px, 4vw, 24px) clamp(12px, 3vw, 20px)', 
-          maxWidth: '1800px', 
-          margin: '0 auto',
-          width: '100%',
-          flex: 1,
-        }}>
+        <div className="portal-content">
           <Outlet />
         </div>
+
+        {/* Phone navigation — same items & labels as sidebar */}
+        <nav className="portal-bottom-nav no-print" aria-label="Main navigation">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={isActive ? 'active' : ''}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </nav>
       </main>
     </div>
   );

@@ -135,7 +135,7 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
   if (!tx) return null;
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
+    <div className={styles.overlay}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.header}>
           <h2>Transaction Details</h2>
@@ -220,14 +220,17 @@ export default function TransactionDetailModal({ transactionId, onClose }: Props
             {/* Items List */}
             <div className={styles.itemsList}>
               {tx.items.map((item: any, idx: number) => (
-                <div key={idx} className={styles.itemRow}>
-                  <span className={styles.itemName}>
-                    {item.product_name}
-                    {item.product_size && <em className={styles.itemSize}>({item.product_size})</em>}
-                  </span>
-                  <span className={styles.itemQty}>{item.quantity}</span>
-                  <span className={styles.itemPrice}>{formatCurrency(item.unit_price)}</span>
-                  <span className={styles.itemTotal}>{formatCurrency(item.line_total)}</span>
+                <div key={idx}>
+                  <div className={styles.itemRow}>
+                    <span className={styles.itemName}>
+                      {item.product_name}
+                      {item.product_size && <em className={styles.itemSize}>({item.product_size})</em>}
+                    </span>
+                    <span className={styles.itemQty}>{item.quantity}</span>
+                    <span className={styles.itemPrice}>{formatCurrency(item.unit_price)}</span>
+                    <span className={styles.itemTotal}>{formatCurrency(item.line_total)}</span>
+                  </div>
+                  {idx < tx.items.length - 1 && <div className={styles.itemDivider} aria-hidden />}
                 </div>
               ))}
             </div>

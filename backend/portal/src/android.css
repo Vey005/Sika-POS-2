@@ -1,0 +1,736 @@
+/*
+ * android.css — Premium Android-native feel for SikaPOS Portal
+ *
+ * Loaded only via main.tsx (alongside index.css + responsive.css).
+ * Overrides the web styles with motion, elevation, ripple effects,
+ * Material-inspired components, and fluid touch-friendly layouts.
+ */
+
+/* ─── 1. CSS TOKENS — Android elevation + motion ─── */
+:root {
+  --elevation-1: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.6);
+  --elevation-2: 0 3px 6px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.5);
+  --elevation-3: 0 10px 20px rgba(0,0,0,0.5), 0 6px 6px rgba(0,0,0,0.4);
+  --elevation-4: 0 20px 40px rgba(0,0,0,0.6), 0 10px 12px rgba(0,0,0,0.4);
+  --motion-standard: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --motion-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1);
+  --motion-accelerate: cubic-bezier(0.4, 0.0, 1, 1);
+  --motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --gold: #D4A017;
+  --gold-bright: #E8B820;
+  --surface-tint: rgba(212, 160, 23, 0.04);
+}
+
+/* ─── 2. GLOBAL — smoother base ─── */
+* {
+  -webkit-tap-highlight-color: transparent;
+  tap-highlight-color: transparent;
+}
+
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  /* Prevent height recalculation on keyboard open/close */
+  overflow: hidden;
+}
+
+/* Smooth page entrance animation */
+#root {
+  animation: appFadeIn 0.3s var(--motion-decelerate) both;
+}
+@keyframes appFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── 3. GLASS PANEL — elevated Android card ─── */
+.glass-panel {
+  background: var(--bg-surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 20px;
+  box-shadow: var(--elevation-1);
+  transition: box-shadow 0.28s var(--motion-standard),
+              transform 0.2s var(--motion-standard),
+              border-color 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-panel:hover {
+  box-shadow: var(--elevation-2);
+  border-color: rgba(212, 160, 23, 0.2);
+}
+
+/* Tinted surface sheen */
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 100%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.glass-panel:active {
+  transform: scale(0.985);
+  box-shadow: var(--elevation-1);
+}
+
+/* ─── 4. RIPPLE BUTTON ENGINE ─── */
+/*
+ * Add class `ripple` to any button/element for the Android ripple effect.
+ * The JS in RippleButton.tsx injects a <span class="ripple-wave"> on click.
+ */
+.ripple {
+  position: relative;
+  overflow: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: rippleAnim 0.55s var(--motion-standard);
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+@keyframes rippleAnim {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ─── 5. BUTTONS — Material You style ─── */
+.btn-primary {
+  background: linear-gradient(135deg, #E8B820 0%, #D4A017 100%);
+  color: #000;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 14px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  min-height: 52px;
+  box-shadow: 0 4px 15px rgba(212,160,23,0.35), 0 2px 4px rgba(0,0,0,0.3);
+  transition: box-shadow 0.2s var(--motion-standard),
+              transform 0.15s var(--motion-standard),
+              background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.2px;
+  position: relative;
+  overflow: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.btn-primary:active {
+  transform: scale(0.96);
+  box-shadow: 0 2px 8px rgba(212,160,23,0.25);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: rgba(255,255,255,0.07);
+  color: var(--text-main);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 13px 20px;
+  border-radius: 14px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 50px;
+  box-shadow: var(--elevation-1);
+  transition: background 0.18s var(--motion-standard),
+              transform 0.15s var(--motion-standard),
+              box-shadow 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.btn-secondary:active {
+  transform: scale(0.96);
+  background: rgba(255,255,255,0.12);
+}
+
+/* Danger button variant */
+.btn-danger {
+  background: rgba(239,68,68,0.12);
+  color: var(--danger);
+  border: 1px solid rgba(239,68,68,0.25);
+  padding: 13px 20px;
+  border-radius: 14px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 50px;
+  transition: background 0.18s, transform 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.btn-danger:active { transform: scale(0.96); background: rgba(239,68,68,0.2); }
+
+/* Icon-only round button */
+.btn-icon-round {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.07);
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--elevation-1);
+  transition: background 0.18s, transform 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.btn-icon-round:active { transform: scale(0.9); }
+
+/* FAB — Floating Action Button */
+.fab {
+  position: fixed;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  border: none;
+  background: linear-gradient(135deg, #E8B820 0%, #D4A017 100%);
+  color: #000;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(212,160,23,0.45), 0 3px 8px rgba(0,0,0,0.4);
+  transition: transform 0.2s var(--motion-spring), box-shadow 0.2s;
+  z-index: 50;
+  position: relative;
+  overflow: hidden;
+}
+.fab:active {
+  transform: scale(0.92);
+  box-shadow: 0 3px 10px rgba(212,160,23,0.35);
+}
+
+/* ─── 6. INPUT FIELDS — Android outlined style ─── */
+.input-field,
+.portal-input,
+.filter-form .filter-select {
+  background: rgba(255,255,255,0.04);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  color: var(--text-main);
+  font-size: 16px;
+  padding: 14px 16px;
+  outline: none;
+  transition: border-color 0.2s var(--motion-standard),
+              box-shadow 0.2s var(--motion-standard),
+              background 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input-field:focus,
+.portal-input:focus {
+  border-color: var(--gold);
+  background: rgba(212,160,23,0.05);
+  box-shadow: 0 0 0 3px rgba(212,160,23,0.15);
+}
+
+/* ─── 7. BOTTOM NAVIGATION — Premium pill indicator ─── */
+.portal-bottom-nav {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  background: rgba(20, 20, 24, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+.portal-bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px;
+  border-radius: 18px;
+  text-decoration: none;
+  color: rgba(240, 240, 244, 0.4);
+  font-size: 10px;
+  font-weight: 600;
+  min-height: 52px;
+  transition: color 0.2s var(--motion-standard),
+              background 0.2s var(--motion-standard),
+              transform 0.12s var(--motion-spring);
+  position: relative;
+  letter-spacing: 0.2px;
+}
+
+/* Active pill indicator behind the icon */
+.portal-bottom-nav a.active {
+  color: var(--gold);
+}
+
+.portal-bottom-nav a.active::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 28px;
+  background: rgba(212, 160, 23, 0.14);
+  border-radius: 12px;
+  z-index: 0;
+  animation: pillIn 0.25s var(--motion-spring) both;
+}
+
+@keyframes pillIn {
+  from { transform: translateX(-50%) scale(0.7); opacity: 0; }
+  to   { transform: translateX(-50%) scale(1);   opacity: 1; }
+}
+
+.portal-bottom-nav a > * {
+  position: relative;
+  z-index: 1;
+}
+
+.portal-bottom-nav a:active {
+  transform: scale(0.88);
+}
+
+/* Bounce animation on active icon */
+.portal-bottom-nav a.active svg {
+  animation: iconBounce 0.35s var(--motion-spring) both;
+}
+@keyframes iconBounce {
+  0%   { transform: translateY(0) scale(1); }
+  40%  { transform: translateY(-4px) scale(1.15); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* ─── 8. HEADER — Blur glass bar ─── */
+.portal-header {
+  background: rgba(12, 12, 15, 0.75) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4) !important;
+  padding-top: max(14px, env(safe-area-inset-top));
+  min-height: 64px;
+}
+
+/* ─── 9. DATA CARDS — elevated touch-friendly items ─── */
+.data-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-radius: 24px !important;
+  padding: 18px 20px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  position: relative;
+  overflow: visible !important; /* Ensure children like status dropdowns do not get cut off */
+}
+
+.data-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--surface-tint);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.data-card:active {
+  transform: scale(0.97) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15) !important;
+}
+
+.data-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13.5px;
+}
+
+.data-card-label {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* ─── 10. STAT CARDS ─── */
+.glass-panel[style*="padding: 24px"] {
+  border-radius: 20px;
+  box-shadow: var(--elevation-2);
+}
+
+/* ─── 11. MODALS — bottom sheet on mobile ─── */
+@media (max-width: 899px) {
+  /*
+   * Use position:fixed + inset:0 instead of height:100vh/100dvh.
+   * This prevents the costly layout reflow when the Android keyboard
+   * opens/closes, because fixed-positioned elements don't resize with
+   * the visual viewport — they stay pinned to the layout viewport.
+   */
+  html, body, #root, .portal-shell {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .portal-main {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .portal-content {
+    flex: 1;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* GPU-accelerate the scroll container so repaints stay on compositor */
+    will-change: scroll-position;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+
+  .modal-overlay {
+    align-items: flex-end; /* Align to bottom like a sheet */
+    justify-content: center;
+    padding: 0; /* No padding for sheets */
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 28px 28px 0 0; /* Top rounded only */
+    border: 1px solid var(--border-strong);
+    border-bottom: none;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+    max-height: 92dvh;
+    padding: 24px 20px;
+    animation: sheetSlideUp 0.35s var(--motion-spring) both;
+    background: var(--bg-surface);
+    position: relative;
+    overflow-y: auto;
+  }
+
+  /* Branded drag handle */
+  .modal-panel::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    background: var(--border-strong);
+    border-radius: 2px;
+    margin: -12px auto 20px;
+  }
+
+  @keyframes sheetSlideUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+}
+
+/* ─── 12. SCROLLABLE CONTENT — native feel ─── */
+.portal-content,
+.modal-panel,
+.portal-sidebar-nav {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Hide scrollbar on mobile for cleaner look */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+}
+
+/* ─── 13. PAGE TRANSITIONS ─── */
+.portal-content > * {
+  animation: pageSlideIn 0.28s var(--motion-decelerate) both;
+}
+
+@keyframes pageSlideIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── 13b. KEYBOARD-OPEN PERFORMANCE ─── */
+/*
+ * When ANY input/textarea/select is focused the keyboard is likely open.
+ * Disable heavy animations and transitions to keep the UI responsive.
+ * Smooth-scroll the focused element into view.
+ */
+.portal-content:has(:focus) {
+  scroll-behavior: smooth;
+}
+
+/* Reduce animation jank while keyboard is visible */
+.portal-content:has(input:focus),
+.portal-content:has(textarea:focus),
+.portal-content:has(select:focus) {
+  /* Disable non-essential animations inside content */
+  --motion-standard: ease;
+  --motion-decelerate: ease;
+  --motion-spring: ease;
+}
+
+/* Ensure focused inputs scroll into view with padding */
+input:focus,
+textarea:focus,
+select:focus {
+  scroll-margin-bottom: 120px;
+  scroll-margin-top: 80px;
+}
+
+/* ─── 14. PAGINATION BAR ─── */
+.pagination-bar {
+  padding: 16px;
+  gap: 16px;
+}
+
+.pagination-bar .btn-secondary {
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 12px;
+  padding: 0 16px;
+}
+
+/* ─── 15. LOGIN CARD — frosted glass ─── */
+.login-page {
+  background: #0C0C0F;
+}
+
+.login-card {
+  border-radius: 28px;
+  box-shadow: var(--elevation-4);
+  border: 1px solid rgba(212,160,23,0.15);
+  background: rgba(20,20,28,0.98);
+  padding: clamp(28px, 7vw, 44px);
+}
+
+/* ─── 16. PROFILE DROPDOWN ─── */
+.portal-profile-menu {
+  border-radius: 20px;
+  box-shadow: var(--elevation-4);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--bg-elevated);
+  animation: menuDropIn 0.22s var(--motion-decelerate) both;
+}
+
+@keyframes menuDropIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── 17. NAV LINK (sidebar on tablet/desktop) ─── */
+.portal-nav-link {
+  border-radius: 14px;
+  min-height: 52px;
+  transition: background 0.18s var(--motion-standard),
+              color 0.18s,
+              transform 0.12s var(--motion-spring);
+}
+
+.portal-nav-link:active {
+  transform: scale(0.96);
+}
+
+.portal-nav-link.active {
+  background: rgba(212,160,23,0.12);
+  box-shadow: inset 0 0 0 1px rgba(212,160,23,0.2);
+}
+
+/* ─── 18. SIGN OUT BUTTON ─── */
+.portal-sign-out-btn {
+  border-radius: 14px;
+  transition: background 0.18s, transform 0.12s;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.portal-sign-out-btn:active {
+  background: rgba(239,68,68,0.1);
+  transform: scale(0.97);
+}
+
+/* ─── 19. TABLE — subtle row interactions ─── */
+@media (min-width: 769px) {
+  table tbody tr {
+    transition: background 0.15s var(--motion-standard);
+  }
+  table tbody tr:hover {
+    background: rgba(255,255,255,0.03);
+  }
+  table tbody tr:active {
+    background: rgba(212,160,23,0.05);
+  }
+}
+
+/* ─── 20. FILTER BAR INPUTS ─── */
+.filter-form {
+  gap: 10px;
+}
+
+.filter-form .filter-select {
+  border-radius: 14px;
+  min-height: 50px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.filter-form .filter-select:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212,160,23,0.15);
+  outline: none;
+}
+
+/* ─── 21. AVATAR ─── */
+.portal-profile-avatar {
+  box-shadow: 0 2px 8px rgba(212,160,23,0.3);
+  transition: transform 0.15s var(--motion-spring);
+}
+
+.portal-profile-btn:active .portal-profile-avatar {
+  transform: scale(0.92);
+}
+
+/* ─── 22. STORE SWITCHER BUTTON ─── */
+.portal-header-store {
+  gap: 10px;
+}
+
+/* ─── 23. EMPTY STATE & LOADING ─── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 10px;
+}
+
+/* ─── 24. ANIMATE-IN DELAYS for staggered cards ─── */
+.animate-fade-in:nth-child(1) { animation-delay: 0ms; }
+.animate-fade-in:nth-child(2) { animation-delay: 60ms; }
+.animate-fade-in:nth-child(3) { animation-delay: 120ms; }
+.animate-fade-in:nth-child(4) { animation-delay: 180ms; }
+.animate-fade-in:nth-child(5) { animation-delay: 240ms; }
+.animate-fade-in:nth-child(6) { animation-delay: 300ms; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s var(--motion-decelerate) both;
+}
+
+/* Ensure calendar dropdowns, period switchers, and select options do not display behind the fixed header/bottom navigation */
+.glass-panel:focus-within {
+  z-index: 1005 !important;
+}
+
+/* Elevate focused date inputs and other form controls on mobile */
+.portal-date-input:focus,
+.input-field:focus,
+.portal-input:focus {
+  position: relative;
+  z-index: 1006 !important;
+}
+
+/* Premium Material status pills */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px !important;
+  border-radius: 12px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+.status-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+.status-completed, .status-applied, .status-paid {
+  background: rgba(34, 197, 94, 0.08) !important;
+  color: #22C55E !important;
+}
+
+.status-pending, .status-warning, .status-debt {
+  background: rgba(245, 158, 11, 0.08) !important;
+  color: #F59E0B !important;
+}
+
+.status-failed, .status-danger, .status-voided, .status-reversed {
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: #EF4444 !important;
+}

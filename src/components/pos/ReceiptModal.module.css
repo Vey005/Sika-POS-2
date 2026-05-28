@@ -139,7 +139,7 @@
 .items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .item {
@@ -147,7 +147,35 @@
   grid-template-columns: 1fr 40px 70px 80px;
   gap: 8px;
   align-items: baseline;
-  padding: 4px 0;
+  padding: 8px 0;
+}
+
+.itemDivider {
+  border: none;
+  border-top: 1px dotted var(--color-border-strong);
+  margin: 2px 0 4px;
+  opacity: 0.9;
+}
+
+.previewModal {
+  max-height: 92vh;
+}
+
+.previewBanner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-4) var(--space-6) 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-gold);
+}
+
+.previewHint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 
 .itemName {
@@ -345,4 +373,148 @@
 @keyframes draw {
   from { stroke-dashoffset: 30; }
   to { stroke-dashoffset: 0; }
+}
+
+@media print {
+  .overlay {
+    position: static;
+    background: #fff;
+    backdrop-filter: none;
+  }
+
+  .successHeader,
+  .previewBanner,
+  .actions {
+    display: none !important;
+  }
+
+  .modal {
+    box-shadow: none;
+    border: none;
+    max-height: none;
+    width: 80mm !important;
+    margin: 0 auto;
+  }
+}
+
+/* ── Compact Template Overrides ── */
+.compactReceipt .receiptHeader {
+  padding: 4px 0;
+}
+.compactReceipt .logo {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 4px;
+}
+.compactReceipt .receiptBusinessName {
+  font-size: 15px;
+}
+.compactReceipt .receiptMeta {
+  font-size: 9px;
+  margin-top: 1px;
+}
+.compactReceipt .divider {
+  margin: 6px 0;
+}
+.compactReceipt .metaGrid {
+  gap: 2px;
+}
+.compactReceipt .metaRow {
+  font-size: 10px;
+}
+.compactReceipt .itemsHeader {
+  font-size: 9px;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+}
+.compactReceipt .item {
+  padding: 3px 0;
+}
+.compactReceipt .itemName {
+  font-size: 11px;
+}
+.compactReceipt .itemQty,
+.compactReceipt .itemPrice,
+.compactReceipt .itemTotal {
+  font-size: 10px;
+}
+.compactReceipt .itemDivider {
+  display: none !important;
+}
+.compactReceipt .totals {
+  gap: 3px;
+}
+.compactReceipt .totalRow {
+  font-size: 10px;
+}
+.compactReceipt .grandTotalRow {
+  font-size: 14px;
+  padding-top: 4px;
+  margin-top: 2px;
+}
+.compactReceipt .footer {
+  padding: var(--space-2) 0;
+}
+.compactReceipt .footerMessage {
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.compactReceipt .barcodeContainer {
+  margin-top: 8px;
+  padding: 8px;
+}
+
+/* ── Elegant Template Overrides ── */
+.elegantReceipt {
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+.elegantReceipt .receiptBusinessName {
+  font-family: 'Outfit', 'Inter', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-gold);
+}
+.elegantReceipt .divider {
+  border-top: 1px solid var(--color-border-strong);
+  position: relative;
+}
+.elegantReceipt .divider::after {
+  content: " ❖ ";
+  color: var(--color-gold);
+  font-size: 8px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--color-elevated);
+  padding: 0 8px;
+}
+.elegantReceipt .dividerBold {
+  border-top: 3px double var(--color-border-strong);
+}
+.elegantReceipt .metaRow {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.elegantReceipt .itemName {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+}
+.elegantReceipt .itemTotal {
+  font-weight: 600;
+}
+.elegantReceipt .grandTotalRow {
+  border-top: 3px double var(--color-gold);
+  border-bottom: 1px solid var(--color-gold);
+  padding: 8px 0;
+  font-size: 20px;
+}
+.elegantReceipt .footerMessage {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--color-text-primary);
 }

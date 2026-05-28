@@ -34,6 +34,7 @@ const sikapos = {
     search: (query: string) => ipcRenderer.invoke('inventory:search', query),
     getByBarcode: (barcode: string) => ipcRenderer.invoke('inventory:getByBarcode', barcode),
     getById: (id: number) => ipcRenderer.invoke('inventory:getById', id),
+    getStockLevels: (ids: number[]) => ipcRenderer.invoke('inventory:getStockLevels', ids),
     save: (product: unknown) => ipcRenderer.invoke('inventory:save', product),
     delete: (id: number) => ipcRenderer.invoke('inventory:delete', id),
     adjustStock: (id: number, delta: number, reason: string) =>
@@ -45,7 +46,9 @@ const sikapos = {
     getCategorySummary: () => ipcRenderer.invoke('inventory:getCategorySummary'),
     importFromExcel: () => ipcRenderer.invoke('inventory:import'),
     downloadTemplate: () => ipcRenderer.invoke('inventory:downloadTemplate'),
+    exportInventory: () => ipcRenderer.invoke('inventory:exportInventory'),
     clearAll: () => ipcRenderer.invoke('inventory:clearAll'),
+    getBatches: (productId: number) => ipcRenderer.invoke('inventory:getBatches', productId),
   },
 
   // Sales / Transactions
@@ -109,12 +112,18 @@ const sikapos = {
   sync: {
     forceSync: () => ipcRenderer.invoke('sync:force'),
     restore: () => ipcRenderer.invoke('sync:restore'),
+    getPendingCount: () => ipcRenderer.invoke('sync:getPendingCount'),
     queueItem: (item: { entity: string; operation: string; payload: unknown; priority?: number }) =>
       ipcRenderer.invoke('sync:queueItem', item),
-    onStatusChange: (callback: (status: 'synced' | 'syncing' | 'error') => void) => {
-      const listener = (_: any, status: 'synced' | 'syncing' | 'error') => callback(status);
+    onStatusChange: (callback: (status: 'synced' | 'syncing' | 'error', pendingCount?: number) => void) => {
+      const listener = (_: any, status: 'synced' | 'syncing' | 'error', pendingCount?: number) => callback(status, pendingCount);
       ipcRenderer.on('sync:statusChanged', listener);
       return () => ipcRenderer.removeListener('sync:statusChanged', listener);
+    },
+    onUsersUpdated: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on('sync:usersUpdated', listener);
+      return () => ipcRenderer.removeListener('sync:usersUpdated', listener);
     },
   },
 
@@ -178,6 +187,15 @@ const sikapos = {
     clockOut: (userId: number) => ipcRenderer.invoke('attendance:clockOut', userId),
     getStatus: (userId: number) => ipcRenderer.invoke('attendance:getStatus', userId),
     getHistory: (userId: number, range?: unknown) => ipcRenderer.invoke('attendance:getHistory', userId, range),
+  },
+
+  // Restock Invoices
+  restock: {
+    getAll: (filters?: any) => ipcRenderer.invoke('restock:getAll', filters),
+    getById: (id: number) => ipcRenderer.invoke('restock:getById', id),
+    create: (input: any) => ipcRenderer.invoke('restock:create', input),
+    delete: (id: number) => ipcRenderer.invoke('restock:delete', id),
+    togglePaid: (id: number) => ipcRenderer.invoke('restock:togglePaid', id),
   },
 };
 

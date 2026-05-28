@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import axios from 'axios';
 import { getDb } from '../db/database';
+import { addBatch } from '../db/batch-helpers';
 
 import { SecureStore } from '../store/secure-store';
 
@@ -42,11 +43,22 @@ export class SyncManager {
       await this.backfillHistoricalCustomers();
       await this.backfillHistoricalCreditLogs();
       await this.backfillUsers();
-    }, 8000);
+      await this.backfillHistoricalRestocks();
+      await this.backfillHistoricalAttendance();
+    }, 2000);
 
     // PERIODIC PULL: Sync updated customer balances from cloud back to POS
     // Run every 1 hour (3600000 ms) since the portal isn't used frequently
     setInterval(() => this.pullUpdatedCustomers(), 60 * 60 * 1000);
+
+    // Pull pending restocks from cloud: run every 30 seconds (30,000 ms)
+    setInterval(() => this.pullPendingRestocks(), 30 * 1000);
+    // And once shortly after startup
+    setTimeout(() => this.pullPendingRestocks(), 4000);
+
+    // Pull staff user updates: run every 30 seconds (30,000 ms)
+    setInterval(() => this.pullUpdatedUsers(), 30 * 1000);
+    setTimeout(() => this.pullUpdatedUsers(), 5000);
   }
 
   private async backfillUsers() {
@@ -54,7 +66,7 @@ export class SyncManager {
     try {
       console.log('[Sync] Queuing users for portal sync.');
       // We push all users as a single 'users' entity payload including hashed PINs
-      const allUsers = db.prepare('SELECT id, name, pin, role, created_at, updated_at FROM users').all();
+      const allUsers = db.prepare('SELECT id, name, pin, role, cashier_nav_visibility, created_at, updated_at FROM users').all();
       
       db.prepare(`
         INSERT INTO sync_queue (entity, operation, payload, status, priority)
@@ -166,6 +178,8 @@ export class SyncManager {
             grand_total: tx.grand_total,
             amount_tendered: tx.amount_tendered || tx.grand_total,
             change_given: tx.change_given || 0,
+            split_cash: tx.split_cash || 0,
+            split_momo: tx.split_momo || 0,
             momo_reference: tx.momo_reference || null,
             created_at: tx.created_at,
             updated_at: tx.updated_at || tx.created_at,
@@ -184,6 +198,72 @@ export class SyncManager {
       console.log('[Sync] Transaction re-sync complete.');
     } catch (err: any) {
       console.error('[SyncManager] Backfill failed:', err.message);
+    }
+  }
+
+  private backfillHistoricalRestocks() {
+    console.log('[SyncManager] Scanning for historical restock invoices...');
+    const db = getDb();
+    try {
+      const allInvoices = db.prepare(`SELECT * FROM restock_invoices`).all() as any[];
+      if (allInvoices.length === 0) {
+        console.log('[SyncManager] No restock invoices to backfill.');
+        return;
+      }
+
+      const existingInSyncQueue = db.prepare(`
+        SELECT DISTINCT json_extract(payload, '$.invoice_number') as inv_num
+        FROM sync_queue
+        WHERE entity = 'restock_invoice'
+      `).all() as any[];
+
+      const existingSet = new Set(existingInSyncQueue.map(x => x.inv_num));
+
+      const getItems = db.prepare(`
+        SELECT product_id, product_name, quantity, cost_price, expiry_date, batch_number
+        FROM restock_invoice_items WHERE invoice_id = ?
+      `);
+
+      const insertQueue = db.prepare(`
+        INSERT INTO sync_queue (entity, operation, payload, status, priority)
+        VALUES ('restock_invoice', 'create', ?, 'pending', 6)
+      `);
+
+      let count = 0;
+      db.transaction(() => {
+        for (const inv of allInvoices) {
+          if (existingSet.has(inv.invoice_number)) continue;
+
+          const items = getItems.all(inv.id) as any[];
+          const payload = JSON.stringify({
+            invoice_number: inv.invoice_number,
+            supplier_name: inv.supplier_name,
+            notes: inv.notes,
+            is_paid: inv.is_paid,
+            total_cost: inv.total_cost,
+            total_items: inv.total_items,
+            created_by: inv.created_by,
+            created_at: inv.created_at,
+            items: items.map(it => ({
+              product_local_id: it.product_id,
+              name: it.product_name,
+              quantity: it.quantity,
+              cost_price: it.cost_price,
+              expiry_date: it.expiry_date || null,
+              batch_number: it.batch_number || null
+            }))
+          });
+
+          insertQueue.run(payload);
+          count++;
+        }
+      })();
+
+      if (count > 0) {
+        console.log(`[SyncManager] Backfilled ${count} restock invoices to sync queue.`);
+      }
+    } catch (err: any) {
+      console.error('[SyncManager] Restock invoices backfill failed:', err.message);
     }
   }
 
@@ -297,6 +377,38 @@ export class SyncManager {
     }
   }
 
+  private async backfillHistoricalAttendance() {
+    const db = getDb();
+    try {
+      // Find all attendance records whose id is NOT already in the sync_queue as an 'attendance' entity
+      const pendingAttendance = db.prepare(`
+        SELECT a.id, a.user_id, a.type, a.created_at
+        FROM attendance a
+        WHERE NOT EXISTS (
+          SELECT 1 FROM sync_queue sq
+          WHERE sq.entity = 'attendance'
+            AND sq.operation = 'push'
+            AND (json_extract(sq.payload, '$.id') = a.id OR json_extract(sq.payload, '$.local_id') = a.id)
+        )
+      `).all() as any[];
+
+      if (pendingAttendance.length > 0) {
+        console.log(`[Sync] Queuing ${pendingAttendance.length} historical attendance logs for portal sync.`);
+        db.transaction(() => {
+          const insertStmt = db.prepare(`
+            INSERT INTO sync_queue (entity, operation, payload, status, priority)
+            VALUES ('attendance', 'push', ?, 'pending', 10)
+          `);
+          for (const item of pendingAttendance) {
+            insertStmt.run(JSON.stringify({ ...item, local_id: item.id }));
+          }
+        })();
+      }
+    } catch (err: any) {
+      console.error('[SyncManager] Attendance backfill failed:', err.message);
+    }
+  }
+
   private async pullUpdatedCustomers() {
     const licenseKey = await this.secureStore.get('license_key');
     const safeKey = licenseKey ? (licenseKey.length > 8 ? `${licenseKey.substring(0, 4)}****${licenseKey.substring(licenseKey.length - 4)}` : '***') : 'undefined';
@@ -362,9 +474,317 @@ export class SyncManager {
     }
   }
 
-  private setStatus(status: 'synced' | 'syncing' | 'error') {
+  private async pullUpdatedUsers() {
+    const licenseKey = await this.secureStore.get('license_key');
+    if (!licenseKey || this.isSyncing) return;
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/v1/sync/users`, {
+        headers: { Authorization: `Bearer ${licenseKey}` }
+      });
+
+      if (response.data.success && response.data.data.users) {
+        const cloudUsers = response.data.data.users as any[];
+        const db = getDb();
+
+        db.transaction(() => {
+          const getLocal = db.prepare('SELECT id, updated_at FROM users WHERE id = ?');
+          const update = db.prepare(`
+            UPDATE users
+            SET name = ?, pin = ?, role = ?, cashier_nav_visibility = ?, updated_at = ?
+            WHERE id = ?
+          `);
+          const insert = db.prepare(`
+            INSERT INTO users (id, name, pin, role, cashier_nav_visibility, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          const cloudIds = new Set<number>();
+
+          for (const cu of cloudUsers) {
+            if (cu.local_id) {
+              cloudIds.add(cu.local_id);
+              const localRow = getLocal.get(cu.local_id) as { id: number; updated_at: string } | undefined;
+              if (localRow) {
+                const localTime = localRow.updated_at ? new Date(localRow.updated_at).getTime() : 0;
+                const cloudTime = cu.updated_at ? new Date(cu.updated_at).getTime() : Date.now();
+                if (cloudTime > localTime) {
+                  update.run(cu.name, cu.pin, cu.role, cu.cashier_nav_visibility, cu.updated_at, cu.local_id);
+                }
+              } else {
+                insert.run(cu.local_id, cu.name, cu.pin, cu.role, cu.cashier_nav_visibility, cu.created_at || cu.updated_at, cu.updated_at);
+              }
+            }
+          }
+
+          // Safe user cleanup: Delete local users not in cloud list (excluding last admin)
+          const localUsers = db.prepare('SELECT id, role FROM users').all() as { id: number; role: string }[];
+          const deleteUser = db.prepare('DELETE FROM users WHERE id = ?');
+          const deleteAttendance = db.prepare('DELETE FROM attendance WHERE user_id = ?');
+          for (const lu of localUsers) {
+            if (!cloudIds.has(lu.id)) {
+              const adminCount = db.prepare("SELECT COUNT(*) FROM users WHERE role = 'admin'").pluck().get() as number;
+              if (lu.role === 'admin' && adminCount <= 1) continue;
+              deleteAttendance.run(lu.id);
+              deleteUser.run(lu.id);
+            }
+          }
+        })();
+
+        // Notify frontend that users have been updated from the cloud
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('sync:usersUpdated');
+        }
+      }
+    } catch (err: any) {
+      console.error('[SyncManager] Pull users failed:', err.message);
+    }
+  }
+
+  private async pullPendingRestocks() {
+    const licenseKey = await this.secureStore.get('license_key');
+    if (!licenseKey || this.isSyncing) return;
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/v1/sync/pull-restocks`, {
+        headers: { Authorization: `Bearer ${licenseKey}` }
+      });
+
+      if (response.data.success && response.data.orders && response.data.orders.length > 0) {
+        const cloudOrders = response.data.orders as any[];
+        console.log(`[Sync] Pulling ${cloudOrders.length} pending restock(s) from cloud...`);
+        const db = getDb();
+        const appliedOrderIds: number[] = [];
+
+        for (const order of cloudOrders) {
+          try {
+            db.transaction(() => {
+              // 1. Double check if invoice is already applied locally
+              const exists = db.prepare('SELECT id FROM restock_invoices WHERE invoice_number = ?').get(order.invoice_number);
+              if (exists) {
+                appliedOrderIds.push(order.id);
+                return;
+              }
+
+              // 2. Insert any new products first and map to their local product IDs
+              const productMap = new Map<string, number>();
+
+              if (order.new_products && Array.isArray(order.new_products)) {
+                const checkBarcode = db.prepare('SELECT id FROM products WHERE barcode = ?');
+                const checkName = db.prepare('SELECT id FROM products WHERE LOWER(name) = LOWER(?)');
+                const insertProd = db.prepare(`
+                  INSERT INTO products (name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold, tax_category, is_active, is_pharmacy, unit, created_at, updated_at)
+                  VALUES (?, ?, ?, ?, ?, 0, 5, ?, 1, 0, 'each', datetime('now'), datetime('now'))
+                `);
+
+                for (const np of order.new_products) {
+                  let existingId: any = null;
+                  if (np.barcode) {
+                    existingId = checkBarcode.get(np.barcode);
+                  }
+                  if (!existingId) {
+                    existingId = checkName.get(np.name);
+                  }
+
+                  let localId: number;
+                  if (existingId) {
+                    localId = (existingId as any).id;
+                  } else {
+                    const res = insertProd.run(
+                      np.name,
+                      np.barcode || null,
+                      np.category || 'General',
+                      np.unit_price || 0,
+                      np.cost_price || 0,
+                      np.tax_category || 'standard'
+                    );
+                    localId = res.lastInsertRowid as number;
+
+                    // Queue the newly created product to sync back to cloud so local_id gets populated there
+                    const newProd = db.prepare('SELECT * FROM products WHERE id = ?').get(localId);
+                    if (newProd) {
+                      db.prepare(`
+                        INSERT INTO sync_queue (entity, operation, payload, status, priority)
+                        VALUES ('product', 'create', ?, 'pending', 5)
+                      `).run(JSON.stringify(newProd));
+                    }
+                  }
+                  const mapKey = np.barcode ? np.barcode : np.name.toLowerCase();
+                  productMap.set(mapKey, localId);
+                }
+              }
+
+              // 3. Create the local restock invoice record
+              const items = order.items || [];
+              const newProdsInItems = order.new_products || [];
+              const totalItems = items.reduce((sum: number, it: any) => sum + (it.quantity || 0), 0) +
+                                 newProdsInItems.reduce((sum: number, it: any) => sum + (it.quantity || 0), 0);
+              const totalCost = items.reduce((sum: number, it: any) => sum + ((it.quantity || 0) * (it.cost_price || 0)), 0) +
+                                newProdsInItems.reduce((sum: number, it: any) => sum + ((it.quantity || 0) * (it.cost_price || 0)), 0);
+
+              const invoiceResult = db.prepare(`
+                INSERT INTO restock_invoices (invoice_number, supplier_name, notes, is_paid, total_cost, total_items, created_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                order.invoice_number,
+                order.supplier_name || null,
+                order.notes || null,
+                order.is_paid ? 1 : 0,
+                totalCost,
+                totalItems,
+                order.created_by || 'Portal Owner',
+                order.created_at || new Date().toISOString()
+              );
+
+              const invoiceId = invoiceResult.lastInsertRowid as number;
+
+              const insertItem = db.prepare(`
+                INSERT INTO restock_invoice_items (invoice_id, product_id, product_name, quantity, cost_price, expiry_date, batch_number, batch_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `);
+
+              // 4. Process existing products in items
+              for (const item of items) {
+                const prodId = item.product_local_id;
+                if (!prodId) continue;
+
+                const prodExists = db.prepare('SELECT name FROM products WHERE id = ?').get(prodId) as { name: string } | undefined;
+                if (!prodExists) {
+                  console.warn(`[Sync Restock] Product local_id ${prodId} not found locally for invoice ${order.invoice_number}`);
+                  continue;
+                }
+
+                const batchId = addBatch(
+                  db,
+                  prodId,
+                  item.quantity,
+                  item.cost_price,
+                  item.batch_number || null,
+                  item.expiry_date || null
+                );
+
+                insertItem.run(
+                  invoiceId,
+                  prodId,
+                  prodExists.name,
+                  item.quantity,
+                  item.cost_price,
+                  item.expiry_date || null,
+                  item.batch_number || null,
+                  batchId
+                );
+
+                const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(prodId);
+                if (updated) {
+                  db.prepare(`
+                    INSERT INTO sync_queue (entity, operation, payload, status, priority)
+                    VALUES ('product', 'update', ?, 'pending', 5)
+                  `).run(JSON.stringify(updated));
+                }
+              }
+
+              // 5. Process new products in items
+              for (const np of newProdsInItems) {
+                const mapKey = np.barcode ? np.barcode : np.name.toLowerCase();
+                const prodId = productMap.get(mapKey);
+                if (!prodId) continue;
+
+                const batchId = addBatch(
+                  db,
+                  prodId,
+                  np.quantity,
+                  np.cost_price,
+                  np.batch_number || null,
+                  np.expiry_date || null
+                );
+
+                insertItem.run(
+                  invoiceId,
+                  prodId,
+                  np.name,
+                  np.quantity,
+                  np.cost_price,
+                  np.expiry_date || null,
+                  np.batch_number || null,
+                  batchId
+                );
+
+                const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(prodId);
+                if (updated) {
+                  db.prepare(`
+                    INSERT INTO sync_queue (entity, operation, payload, status, priority)
+                    VALUES ('product', 'update', ?, 'pending', 5)
+                  `).run(JSON.stringify(updated));
+                }
+              }
+
+              appliedOrderIds.push(order.id);
+            })();
+          } catch (err: any) {
+            console.error(`[Sync Restock] Failed to process restock order ${order.invoice_number}:`, err.message);
+          }
+        }
+
+        if (appliedOrderIds.length > 0) {
+          console.log(`[Sync] Acknowledging ${appliedOrderIds.length} restock orders to cloud...`);
+          await axios.post(`${API_BASE_URL}/v1/sync/ack-restock`, {
+            order_ids: appliedOrderIds
+          }, {
+            headers: { Authorization: `Bearer ${licenseKey}` }
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('[SyncManager] Pull pending restocks failed:', err.message);
+    }
+  }
+
+  private setStatus(status: 'synced' | 'syncing' | 'error', pendingCount?: number) {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('sync:statusChanged', status);
+      this.mainWindow.webContents.send('sync:statusChanged', status, pendingCount ?? 0);
+    }
+  }
+
+  private deduplicatePendingQueue(db: any) {
+    try {
+      const pending = db.prepare("SELECT id, entity, operation, payload FROM sync_queue WHERE status = 'pending'").all() as any[];
+      if (pending.length === 0) return;
+
+      const latestMap = new Map<string, number>();
+      const duplicateIds: number[] = [];
+
+      for (const item of pending) {
+        let entityKey: string | null = null;
+        try {
+          const payload = JSON.parse(item.payload);
+          const entityId = payload.id ?? payload.local_id ?? payload.receipt_number;
+          if (entityId !== undefined && entityId !== null) {
+            entityKey = `${item.entity}:${entityId}`;
+          }
+        } catch {
+          // ignore parsing error
+        }
+
+        if (entityKey) {
+          if (latestMap.has(entityKey)) {
+            const olderId = latestMap.get(entityKey)!;
+            duplicateIds.push(olderId);
+          }
+          latestMap.set(entityKey, item.id);
+        }
+      }
+
+      if (duplicateIds.length > 0) {
+        console.log(`[SyncManager] Deduplicating queue: removing ${duplicateIds.length} obsolete pending updates.`);
+        db.transaction(() => {
+          const deleteStmt = db.prepare("DELETE FROM sync_queue WHERE id = ?");
+          for (const id of duplicateIds) {
+            deleteStmt.run(id);
+          }
+        })();
+      }
+    } catch (err: any) {
+      console.warn('[SyncManager] Queue deduplication failed:', err.message);
     }
   }
 
@@ -372,6 +792,9 @@ export class SyncManager {
     if (this.isSyncing) return;
 
     const db = getDb();
+
+    // Deduplicate the queue before counting and executing
+    this.deduplicatePendingQueue(db);
 
     // Check if there are pending items
     const pendingCount = db.prepare(`SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'`).pluck().get() as number;
@@ -383,8 +806,8 @@ export class SyncManager {
     }
 
     this.isSyncing = true;
-    this.setStatus('syncing');
-    console.log('[Sync] Sync cycle started.');
+    this.setStatus('syncing', pendingCount);
+    console.log(`[Sync] Sync cycle started. ${pendingCount} items pending.`);
 
     try {
       // Sync by priority: lower number = higher priority (1 = transactions, 5 = products, 10 = others)
@@ -392,7 +815,7 @@ export class SyncManager {
         SELECT * FROM sync_queue 
         WHERE status = 'pending' AND (retry_count IS NULL OR retry_count < ${MAX_RETRIES}) 
         ORDER BY priority ASC, created_at ASC 
-        LIMIT 50
+        LIMIT 100
       `).all() as any[];
 
       // We use the license_key as the unique identifier for the cloud API
@@ -473,7 +896,15 @@ export class SyncManager {
         }
       }
 
-      this.setStatus('synced');
+      // Periodically clean up old synced items to prevent SQLite bloat
+      try {
+        db.prepare(`DELETE FROM sync_queue WHERE status = 'synced' AND updated_at < datetime('now', '-7 days')`).run();
+      } catch (cleanErr: any) {
+        console.warn('[SyncManager] Queue cleanup failed:', cleanErr.message);
+      }
+
+      const remaining = db.prepare(`SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'`).pluck().get() as number;
+      this.setStatus('synced', remaining);
       console.log('[Sync] Sync completed.');
     } catch (err: any) {
       if (err.code !== 'ENOTFOUND' && err.code !== 'ECONNREFUSED') {
@@ -494,17 +925,10 @@ export class SyncManager {
     try {
       console.log('[Sync] Starting cloud data recovery.');
       const businessId = this.secureStore.get('license_key') || 'default_shop';
-      const response = await axios.get(`${API_BASE_URL}/v1/sync/pull`, {
-        headers: {
-          Authorization: `Bearer ${businessId}`
-        }
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Server error during recovery');
-      }
-
-      const { data } = response.data;
+      
+      let page = 1;
+      const limit = 1000;
+      let hasMore = true;
       let totalRestored = 0;
 
       const toObj = (v: any) => {
@@ -526,252 +950,280 @@ export class SyncManager {
         return out;
       };
 
-      // Wrap in transaction for atomicity and performance
-      const restoreTransaction = db.transaction(() => {
-        // Cloud groups by entity names used by sync push:
-        // 'product', 'customer', 'transaction', 'users', 'business_info', 'credit_payment'
-
-        // 1) Products
-        if (data.product && Array.isArray(data.product)) {
-          const products = flatten(data.product);
-          const insertProd = db.prepare(`
-            INSERT OR REPLACE INTO products (
-              id, name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold,
-              tax_category, is_active, is_pharmacy, expiry_date, batch_number, nafdac_number,
-              unit, pack_size, pack_price, pack_label, image_path, is_inventory, size, created_at, updated_at
-            ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?,
-              ?, ?, ?, ?, ?, ?,
-              ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-          `);
-          for (const p of products) {
-            if (!p || !p.id) continue;
-            insertProd.run(
-              p.id,
-              p.name || 'Product',
-              p.barcode || null,
-              p.category || 'General',
-              Number(p.unit_price ?? p.price ?? 0),
-              Number(p.cost_price ?? 0),
-              Number(p.stock_qty ?? p.stock ?? 0),
-              Number(p.low_stock_threshold ?? 5),
-              p.tax_category || 'standard',
-              Number(p.is_active ?? 1),
-              Number(p.is_pharmacy ?? 0),
-              p.expiry_date || null,
-              p.batch_number || null,
-              p.nafdac_number || null,
-              p.unit || 'each',
-              Math.max(1, Number(p.pack_size || 1)),
-              p.pack_price ?? null,
-              p.pack_label || 'Box',
-              p.image_path || null,
-              Number(p.is_inventory ?? 1),
-              p.size || null,
-              p.created_at || null,
-              p.updated_at || null
-            );
-            totalRestored++;
+      while (hasMore) {
+        console.log(`[Sync] Fetching cloud recovery data page ${page}...`);
+        const response = await axios.get(`${API_BASE_URL}/v1/sync/pull`, {
+          params: { page, limit },
+          headers: {
+            Authorization: `Bearer ${businessId}`
           }
+        });
+
+        if (!response.data.success) {
+          throw new Error(response.data.message || 'Server error during recovery');
         }
 
-        // 2) Customers
-        if (data.customer && Array.isArray(data.customer)) {
-          const customers = flatten(data.customer);
-          const insertCust = db.prepare(`
-            INSERT OR REPLACE INTO customers (
-              id, name, phone, email, credit_balance, credit_limit, loyalty_points, total_spent, notes,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          for (const c of customers) {
-            if (!c) continue;
-            const id = Number(c.local_id ?? c.id);
-            if (!id) continue;
-            insertCust.run(
-              id,
-              c.name || 'Customer',
-              c.phone || null,
-              c.email || null,
-              Number(c.credit_balance ?? 0),
-              Number(c.credit_limit ?? 0),
-              Number(c.loyalty_points ?? 0),
-              Number(c.total_spent ?? 0),
-              c.notes || null,
-              c.created_at || null,
-              c.updated_at || null
-            );
-            totalRestored++;
-          }
+        const { data, hasMore: serverHasMore } = response.data;
+        hasMore = serverHasMore;
+
+        const entityKeys = Object.keys(data || {});
+        const hasData = entityKeys.some(key => Array.isArray(data[key]) && data[key].length > 0);
+        if (!hasData) {
+          console.log('[Sync] No data in current recovery page, finishing recovery.');
+          break;
         }
 
-        // 3) Users (staff)
-        if (data.users && Array.isArray(data.users)) {
-          const users = flatten(data.users);
-          const insertUser = db.prepare(`
-            INSERT OR REPLACE INTO users (id, name, pin, role, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `);
-          for (const u of users) {
-            if (!u) continue;
-            const id = Number(u.local_id ?? u.id);
-            if (!id) continue;
-            insertUser.run(
-              id,
-              u.name || 'User',
-              u.pin || '',
-              u.role || 'cashier',
-              u.created_at || null,
-              u.updated_at || null
-            );
-            totalRestored++;
-          }
-        }
+        let pageRestoredCount = 0;
 
-        // 4) Transactions + items
-        if (data.transaction && Array.isArray(data.transaction)) {
-          const txs = flatten(data.transaction);
-          const insertTx = db.prepare(`
-            INSERT OR REPLACE INTO transactions (
-              id, receipt_number, customer_id, customer_name, cashier_name, status, payment_method,
-              subtotal, discount_amount, discount_type,
-              tax_vat, tax_nhil, tax_getfund, tax_covid, total_tax,
-              grand_total, amount_tendered, change_given, momo_reference, paid_amount,
-              created_at, updated_at
-            ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?,
-              ?, ?, ?,
-              ?, ?, ?, ?, ?,
-              ?, ?, ?, ?, ?,
-              ?, ?
-            )
-          `);
-
-          const deleteItems = db.prepare(`DELETE FROM transaction_items WHERE transaction_id = ?`);
-          const insertItem = db.prepare(`
-            INSERT INTO transaction_items (
-              transaction_id, product_id, product_name, product_barcode, product_size, category,
-              quantity, unit_price, cost_price, line_total, tax_category
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-
-          for (const t of txs) {
-            if (!t || !t.receipt_number) continue;
-
-            const id = Number(t.local_id ?? t.id) || undefined;
-            const taxObj = (t.tax && typeof t.tax === 'object') ? t.tax : {};
-
-            const taxVat = Number(t.tax_vat ?? taxObj.vat ?? 0);
-            const taxNhil = Number(t.tax_nhil ?? taxObj.nhil ?? 0);
-            const taxGetfund = Number(t.tax_getfund ?? taxObj.getfund ?? 0);
-            const taxCovid = Number(t.tax_covid ?? taxObj.covid ?? 0);
-            const totalTax = Number(t.total_tax ?? taxObj.totalTax ?? 0);
-
-            insertTx.run(
-              id ?? null,
-              t.receipt_number,
-              t.customer_id ?? null,
-              t.customer_name ?? null,
-              t.cashier_name || 'Cashier',
-              t.status || (t.payment_method === 'credit' ? 'debt' : 'completed'),
-              t.payment_method || 'cash',
-              Number(t.subtotal ?? (t.grand_total ?? 0)),
-              Number(t.discount_amount ?? 0),
-              t.discount_type ?? null,
-              taxVat, taxNhil, taxGetfund, taxCovid, totalTax,
-              Number(t.grand_total ?? 0),
-              Number(t.amount_tendered ?? (t.grand_total ?? 0)),
-              Number(t.change_given ?? 0),
-              t.momo_reference ?? null,
-              Number(t.paid_amount ?? 0),
-              t.created_at ?? null,
-              t.updated_at ?? null
-            );
-
-            // Find the transaction_id we just wrote (if id wasn't provided)
-            const txRow = db.prepare(`SELECT id FROM transactions WHERE receipt_number = ?`).get(t.receipt_number) as { id: number } | undefined;
-            const txId = txRow?.id;
-            if (!txId) continue;
-
-            deleteItems.run(txId);
-            if (Array.isArray(t.items)) {
-              for (const it of t.items) {
-                if (!it) continue;
-                insertItem.run(
-                  txId,
-                  it.product_id ?? null,
-                  it.product_name || it.name || 'Item',
-                  it.product_barcode || it.barcode || null,
-                  it.product_size || null,
-                  it.category || 'General',
-                  Number(it.quantity ?? 1),
-                  Number(it.unit_price ?? it.price ?? 0),
-                  Number(it.cost_price ?? 0),
-                  Number(it.line_total ?? ((it.quantity ?? 1) * (it.unit_price ?? it.price ?? 0))),
-                  it.tax_category || 'standard'
-                );
-              }
-            }
-
-            totalRestored++;
-          }
-        }
-
-        // 5) Business profile → settings + secureStore
-        if (data.business_info && Array.isArray(data.business_info)) {
-          const bizInfos = flatten(data.business_info);
-          const latest = bizInfos[bizInfos.length - 1];
-          if (latest) {
-            const upsertSetting = db.prepare(`
-              INSERT INTO settings (key, value, updated_at)
-              VALUES (?, ?, datetime('now'))
-              ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        // Wrap in transaction for atomicity and performance
+        const restoreTransaction = db.transaction(() => {
+          // 1) Products
+          if (data.product && Array.isArray(data.product)) {
+            const products = flatten(data.product);
+            const insertProd = db.prepare(`
+              INSERT OR REPLACE INTO products (
+                id, name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold,
+                tax_category, is_active, is_pharmacy, expiry_date, batch_number, nafdac_number,
+                unit, pack_size, pack_price, pack_label, image_path, is_inventory, size, created_at, updated_at
+              ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
+              )
             `);
-            if (latest.business_name) upsertSetting.run('business_name', String(latest.business_name));
-            if (latest.business_address !== undefined) upsertSetting.run('business_address', String(latest.business_address || ''));
-            if (latest.business_phone !== undefined) upsertSetting.run('business_phone', String(latest.business_phone || ''));
-            totalRestored++;
-
-            try {
-              if (latest.business_logo) {
-                this.secureStore.set('business_logo', latest.business_logo);
-              }
-            } catch {
-              // ignore
+            for (const p of products) {
+              if (!p || !p.id) continue;
+              insertProd.run(
+                p.id,
+                p.name || 'Product',
+                p.barcode || null,
+                p.category || 'General',
+                Number(p.unit_price ?? p.price ?? 0),
+                Number(p.cost_price ?? 0),
+                Number(p.stock_qty ?? p.stock ?? 0),
+                Number(p.low_stock_threshold ?? 5),
+                p.tax_category || 'standard',
+                Number(p.is_active ?? 1),
+                Number(p.is_pharmacy ?? 0),
+                p.expiry_date || null,
+                p.batch_number || null,
+                p.nafdac_number || null,
+                p.unit || 'each',
+                Math.max(1, Number(p.pack_size || 1)),
+                p.pack_price ?? null,
+                p.pack_label || 'Box',
+                p.image_path || null,
+                Number(p.is_inventory ?? 1),
+                p.size || null,
+                p.created_at || null,
+                p.updated_at || null
+              );
+              pageRestoredCount++;
             }
           }
-        }
 
-        // 6) Credit payments
-        if (data.credit_payment && Array.isArray(data.credit_payment)) {
-          const pays = flatten(data.credit_payment);
-          const insertPay = db.prepare(`
-            INSERT OR IGNORE INTO credit_payments (cloud_id, customer_id, amount, payment_method, note, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `);
-          for (const p of pays) {
-            if (!p) continue;
-            const cloudId = Number(p.cloud_id ?? p.id);
-            const customerId = Number(p.customer_id);
-            if (!cloudId || !customerId) continue;
-            insertPay.run(
-              cloudId,
-              customerId,
-              Number(p.amount ?? 0),
-              p.payment_method || 'cash',
-              p.note || null,
-              p.created_at || null
-            );
-            totalRestored++;
+          // 2) Customers
+          if (data.customer && Array.isArray(data.customer)) {
+            const customers = flatten(data.customer);
+            const insertCust = db.prepare(`
+              INSERT OR REPLACE INTO customers (
+                id, name, phone, email, credit_balance, credit_limit, loyalty_points, total_spent, notes,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            for (const c of customers) {
+              if (!c) continue;
+              const id = Number(c.local_id ?? c.id);
+              if (!id) continue;
+              insertCust.run(
+                id,
+                c.name || 'Customer',
+                c.phone || null,
+                c.email || null,
+                Number(c.credit_balance ?? 0),
+                Number(c.credit_limit ?? 0),
+                Number(c.loyalty_points ?? 0),
+                Number(c.total_spent ?? 0),
+                c.notes || null,
+                c.created_at || null,
+                c.updated_at || null
+              );
+              pageRestoredCount++;
+            }
           }
-        }
-      });
 
-      restoreTransaction();
+          // 3) Users (staff)
+          if (data.users && Array.isArray(data.users)) {
+            const users = flatten(data.users);
+            const insertUser = db.prepare(`
+              INSERT OR REPLACE INTO users (id, name, pin, role, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            for (const u of users) {
+              if (!u) continue;
+              const id = Number(u.local_id ?? u.id);
+              if (!id) continue;
+              insertUser.run(
+                id,
+                u.name || 'User',
+                u.pin || '',
+                u.role || 'cashier',
+                u.created_at || null,
+                u.updated_at || null
+              );
+              pageRestoredCount++;
+            }
+          }
+
+          // 4) Transactions + items
+          if (data.transaction && Array.isArray(data.transaction)) {
+            const txs = flatten(data.transaction);
+            const insertTx = db.prepare(`
+              INSERT OR REPLACE INTO transactions (
+                id, receipt_number, customer_id, customer_name, cashier_name, status, payment_method,
+                subtotal, discount_amount, discount_type,
+                tax_vat, tax_nhil, tax_getfund, tax_covid, total_tax,
+                grand_total, amount_tendered, change_given, momo_reference, paid_amount,
+                split_cash, split_momo,
+                created_at, updated_at
+              ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?,
+                ?, ?
+              )
+            `);
+
+            const deleteItems = db.prepare(`DELETE FROM transaction_items WHERE transaction_id = ?`);
+            const insertItem = db.prepare(`
+              INSERT INTO transaction_items (
+                transaction_id, product_id, product_name, product_barcode, product_size, category,
+                quantity, unit_price, cost_price, line_total, tax_category
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+
+            for (const t of txs) {
+              if (!t || !t.receipt_number) continue;
+
+              const id = Number(t.local_id ?? t.id) || undefined;
+              const taxObj = (t.tax && typeof t.tax === 'object') ? t.tax : {};
+
+              const taxVat = Number(t.tax_vat ?? taxObj.vat ?? 0);
+              const taxNhil = Number(t.tax_nhil ?? taxObj.nhil ?? 0);
+              const taxGetfund = Number(t.tax_getfund ?? taxObj.getfund ?? 0);
+              const taxCovid = Number(t.tax_covid ?? taxObj.covid ?? 0);
+              const totalTax = Number(t.total_tax ?? taxObj.totalTax ?? 0);
+
+              insertTx.run(
+                id ?? null,
+                t.receipt_number,
+                t.customer_id ?? null,
+                t.customer_name ?? null,
+                t.cashier_name || 'Cashier',
+                t.status || (t.payment_method === 'credit' ? 'debt' : 'completed'),
+                t.payment_method || 'cash',
+                Number(t.subtotal ?? (t.grand_total ?? 0)),
+                Number(t.discount_amount ?? 0),
+                t.discount_type ?? null,
+                taxVat, taxNhil, taxGetfund, taxCovid, totalTax,
+                Number(t.grand_total ?? 0),
+                Number(t.amount_tendered ?? (t.grand_total ?? 0)),
+                Number(t.change_given ?? 0),
+                t.momo_reference ?? null,
+                Number(t.paid_amount ?? 0),
+                Number(t.split_cash ?? 0),
+                Number(t.split_momo ?? 0),
+                t.created_at ?? null,
+                t.updated_at ?? null
+              );
+
+              const txRow = db.prepare(`SELECT id FROM transactions WHERE receipt_number = ?`).get(t.receipt_number) as { id: number } | undefined;
+              const txId = txRow?.id;
+              if (!txId) continue;
+
+              deleteItems.run(txId);
+              if (Array.isArray(t.items)) {
+                for (const it of t.items) {
+                  if (!it) continue;
+                  insertItem.run(
+                    txId,
+                    it.product_id ?? null,
+                    it.product_name || it.name || 'Item',
+                    it.product_barcode || it.barcode || null,
+                    it.product_size || null,
+                    it.category || 'General',
+                    Number(it.quantity ?? 1),
+                    Number(it.unit_price ?? it.price ?? 0),
+                    Number(it.cost_price ?? 0),
+                    Number(it.line_total ?? ((it.quantity ?? 1) * (it.unit_price ?? it.price ?? 0))),
+                    it.tax_category || 'standard'
+                  );
+                }
+              }
+
+              pageRestoredCount++;
+            }
+          }
+
+          // 5) Business profile
+          if (data.business_info && Array.isArray(data.business_info)) {
+            const bizInfos = flatten(data.business_info);
+            const latest = bizInfos[bizInfos.length - 1];
+            if (latest) {
+              const upsertSetting = db.prepare(`
+                INSERT INTO settings (key, value, updated_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+              `);
+              if (latest.business_name) upsertSetting.run('business_name', String(latest.business_name));
+              if (latest.business_address !== undefined) upsertSetting.run('business_address', String(latest.business_address || ''));
+              if (latest.business_phone !== undefined) upsertSetting.run('business_phone', String(latest.business_phone || ''));
+              pageRestoredCount++;
+
+              try {
+                if (latest.business_logo) {
+                  this.secureStore.set('business_logo', latest.business_logo);
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
+
+          // 6) Credit payments
+          if (data.credit_payment && Array.isArray(data.credit_payment)) {
+            const pays = flatten(data.credit_payment);
+            const insertPay = db.prepare(`
+              INSERT OR IGNORE INTO credit_payments (cloud_id, customer_id, amount, payment_method, note, created_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            for (const p of pays) {
+              if (!p) continue;
+              const cloudId = Number(p.cloud_id ?? p.id);
+              const customerId = Number(p.customer_id);
+              if (!cloudId || !customerId) continue;
+              insertPay.run(
+                cloudId,
+                customerId,
+                Number(p.amount ?? 0),
+                p.payment_method || 'cash',
+                p.note || null,
+                p.created_at || null
+              );
+              pageRestoredCount++;
+            }
+          }
+        });
+
+        restoreTransaction();
+        totalRestored += pageRestoredCount;
+        page++;
+      }
 
       this.setStatus('synced');
-      console.log('[Sync] Recovery complete.');
+      console.log(`[Sync] Recovery complete. Restored ${totalRestored} total records.`);
       return { success: true, count: totalRestored };
     } catch (err: any) {
       console.error('[SyncManager] Cloud recovery failed:', err.message);

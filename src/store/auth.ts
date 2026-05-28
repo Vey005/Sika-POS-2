@@ -31,6 +31,7 @@ export interface ReceiptConfig {
   showBarcode: boolean;
   currency: string;
   paperSize?: string;
+  template?: 'standard' | 'compact' | 'elegant';
 }
 
 interface AuthState {
@@ -42,6 +43,7 @@ interface AuthState {
   businessLogo: string | null;
   receiptFooter: string;
   taxConfig: TaxConfig[];
+  taxEnabled: boolean;
   receiptConfig: ReceiptConfig;
   /** Effective visibility for sidebar tabs when logged in as cashier (POS always true). */
   cashierNavVisibility: Record<CashierNavTabId, boolean>;
@@ -51,6 +53,7 @@ interface AuthState {
   setBusinessLogo: (logo: string | null) => void;
   setReceiptFooter: (footer: string) => void;
   setTaxConfig: (config: TaxConfig[]) => void;
+  setTaxEnabled: (enabled: boolean) => void;
   setReceiptConfig: (config: Partial<ReceiptConfig>) => void;
   setCashierNavVisibility: (jsonOrMerged: string | Record<CashierNavTabId, boolean> | null | undefined) => void;
   setActivated: (activated: boolean) => void;
@@ -71,6 +74,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     { id: 'getfund', name: 'GETFund', rate: 2.5 },
     { id: 'covid', name: 'COVID Levy', rate: 1.0 }
   ],
+  taxEnabled: true,
   cashierNavVisibility: { ...DEFAULT_CASHIER_NAV_VISIBILITY },
 
   receiptConfig: {
@@ -86,6 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     showTIN: true,
     showBarcode: true,
     currency: 'GH₵',
+    template: 'standard',
   },
 
   login: (user: User) => {
@@ -105,6 +110,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setTaxConfig: (taxConfig: TaxConfig[]) =>
     set({ taxConfig }),
+
+  setTaxEnabled: (taxEnabled: boolean) =>
+    set({ taxEnabled }),
 
   setReceiptConfig: (receiptConfig: Partial<ReceiptConfig>) =>
     set((state) => ({ receiptConfig: { ...state.receiptConfig, ...receiptConfig } })),

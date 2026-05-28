@@ -89,7 +89,7 @@ export default function ReportsScreen() {
 
   const handleReverse = async (id: number) => {
     if (!window.sikapos) return;
-    
+
     const ok = await showConfirm('Are you sure you want to reverse this sale? All items will be returned to stock.');
     if (!ok) return;
 
@@ -113,14 +113,14 @@ export default function ReportsScreen() {
 
   const handlePrintEOD = async () => {
     if (!window.sikapos) return;
-    
+
     const from = dateRange.from || today;
     const to = dateRange.to || today;
-    
+
     const dates: string[] = [];
     let current = new Date(from);
     const endDate = new Date(to);
-    
+
     while (current <= endDate) {
       dates.push(current.toISOString().slice(0, 10));
       current.setDate(current.getDate() + 1);
@@ -149,12 +149,12 @@ export default function ReportsScreen() {
           });
         }
       }
-      
+
       if (reportsToPreview.length === 0) {
         await showAlert('No transactions found for the selected period.');
         return;
       }
-      
+
       setPreviewReports(reportsToPreview);
     } catch (err: any) {
       await showAlert(`Failed to load report data: ${formatErrorMsg(err)}`);
@@ -204,8 +204,8 @@ export default function ReportsScreen() {
         {activeTab === 'sales' && (
           <div style={{ display: 'flex', gap: '10px' }}>
 
-            <button 
-              className={styles.printReportBtn} 
+            <button
+              className={styles.printReportBtn}
               onClick={handlePrintEOD}
               disabled={isPrinting}
             >
@@ -286,8 +286,8 @@ export default function ReportsScreen() {
                     ) : filteredTransactions.length === 0 ? (
                       <tr><td colSpan={9} className={styles.emptyRow}>No transactions match your search</td></tr>
                     ) : filteredTransactions.map(tx => (
-                      <tr 
-                        key={tx.id} 
+                      <tr
+                        key={tx.id}
                         className={`${styles.tableRow} ${tx.status === 'voided' || tx.status === 'reversed' ? styles.voided : ''}`}
                         onClick={() => setSelectedTxId(tx.id)}
                       >
@@ -303,9 +303,9 @@ export default function ReportsScreen() {
                         <td className={styles.totalCell}>{useAuthStore.getState().receiptConfig.currency} {formatCurrency(tx.grand_total)}</td>
                         <td>
                           <span className={`${styles.statusBadge} ${
-                            tx.status === 'voided' ? styles.statusVoided : 
-                            tx.status === 'reversed' ? styles.statusReversed : 
-                            tx.status === 'debt' ? styles.statusDebt : 
+                            tx.status === 'voided' ? styles.statusVoided :
+                            tx.status === 'reversed' ? styles.statusReversed :
+                            tx.status === 'debt' ? styles.statusDebt :
                             styles.statusCompleted
                           }`}>
                             {tx.status === 'debt' ? 'Owes' : tx.status}
@@ -414,7 +414,7 @@ export default function ReportsScreen() {
                   ) : attendanceLogs.length === 0 ? (
                     <tr><td colSpan={5} className={styles.emptyRow}>No attendance logs found for this period</td></tr>
                   ) : attendanceLogs.map(log => {
-                    const duration = log.clock_out 
+                    const duration = log.clock_out
                       ? Math.round((new Date(log.clock_out).getTime() - new Date(log.clock_in).getTime()) / (1000 * 60))
                       : null;
                     const hours = duration ? Math.floor(duration / 60) : 0;
@@ -456,9 +456,9 @@ export default function ReportsScreen() {
         />
       )}
       {selectedTxId && (
-        <TransactionDetailModal 
-          transactionId={selectedTxId} 
-          onClose={() => setSelectedTxId(null)} 
+        <TransactionDetailModal
+          transactionId={selectedTxId}
+          onClose={() => setSelectedTxId(null)}
         />
       )}
       {selectedShiftLog && (

@@ -30,7 +30,11 @@ export default function GlobalDialog() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        closeDialog(currentDialog.type === 'prompt' ? null : false);
+        if (currentDialog.type === 'attendanceExit') {
+          closeDialog('cancel');
+        } else {
+          closeDialog(currentDialog.type === 'prompt' ? null : false);
+        }
       } else if (e.key === 'Enter') {
         // If alert, we can just close on Enter. 
         if (currentDialog.type === 'alert') {
@@ -50,7 +54,7 @@ export default function GlobalDialog() {
 
   if (!currentDialog) return null;
 
-  const isConfirm = currentDialog.type === 'confirm' || currentDialog.type === 'prompt';
+  const isConfirm = currentDialog.type === 'confirm' || currentDialog.type === 'prompt' || currentDialog.type === 'attendanceExit';
   const isPrompt = currentDialog.type === 'prompt';
 
   return (
@@ -92,21 +96,46 @@ export default function GlobalDialog() {
         </div>
 
         <div className={styles.actions}>
-          {isConfirm && (
-            <button
-              className={styles.btnCancel}
-              onClick={() => closeDialog(isPrompt ? null : false)}
-            >
-              Cancel
-            </button>
+          {currentDialog.type === 'attendanceExit' ? (
+            <>
+              <button
+                className={styles.btnCancel}
+                onClick={() => closeDialog('cancel')}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.btnSecondary}
+                onClick={() => closeDialog('stay_in')}
+              >
+                Stay Clocked In
+              </button>
+              <button
+                className={styles.btnConfirm}
+                onClick={() => closeDialog('clock_out')}
+              >
+                Clock Out
+              </button>
+            </>
+          ) : (
+            <>
+              {isConfirm && (
+                <button
+                  className={styles.btnCancel}
+                  onClick={() => closeDialog(isPrompt ? null : false)}
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                ref={confirmBtnRef}
+                className={styles.btnConfirm}
+                onClick={() => closeDialog(isPrompt ? promptValue : true)}
+              >
+                OK
+              </button>
+            </>
           )}
-          <button
-            ref={confirmBtnRef}
-            className={styles.btnConfirm}
-            onClick={() => closeDialog(isPrompt ? promptValue : true)}
-          >
-            OK
-          </button>
         </div>
       </div>
     </div>

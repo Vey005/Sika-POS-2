@@ -114,9 +114,29 @@ export async function saveAsPDF(data: any, type: 'receipt' | 'report') {
   
   await win.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
 
+  const sanitizeFilename = (s: unknown) =>
+    String(s ?? '')
+      .replace(/[^\w\-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'report';
+
+  const reportData = Array.isArray(data) ? data[0] : data;
+  const fileDate =
+    reportData?.reportFileDate ||
+    String(reportData?.date || '')
+      .match(/\d{4}-\d{2}-\d{2}/)?.[0] ||
+    sanitizeFilename(new Date().toISOString().slice(0, 10));
+  const staffName = reportData?.cashierName ? sanitizeFilename(reportData.cashierName) : '';
+  const defaultBase =
+    type === 'receipt'
+      ? `receipt-${sanitizeFilename(reportData?.receiptNumber || 'sale')}`
+      : staffName
+        ? `${staffName}-${fileDate}`
+        : `report-${fileDate}`;
+
   const pdfPath = await dialog.showSaveDialog({
     title: `Save ${type === 'receipt' ? 'Receipt' : 'Report'} as PDF`,
-    defaultPath: `${type}-${escapeHtml(data.receiptNumber || (Array.isArray(data) ? data[0]?.date : data.date) || new Date().getTime())}.pdf`,
+    defaultPath: `${defaultBase}.pdf`,
     filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
   });
 
@@ -192,7 +212,9 @@ function generateReceiptHtml(receipt: any) {
         .receipt-info { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
         th { text-align: left; border-bottom: 2px solid #eee; padding: 10px 0; font-size: 14px; text-transform: uppercase; color: #888; }
-        td { padding: 12px 0; border-bottom: 1px solid #fafafa; font-size: 15px; }
+        td { padding: 12px 0; font-size: 15px; }
+        tr.item-row td { border-bottom: 1px dotted #ccc; }
+        tr.item-row:last-child td { border-bottom: none; }
         .total-section { margin-top: 20px; }
         .total-row { display: flex; justify-content: flex-end; margin-bottom: 8px; font-size: 15px; }
         .total-label { width: 150px; text-align: right; margin-right: 20px; color: #666; }
@@ -241,8 +263,8 @@ function generateReceiptHtml(receipt: any) {
           </tr>
         </thead>
         <tbody>
-          ${receipt.items.map((item: any) => `
-            <tr>
+          ${receipt.items.map((item: any, index: number) => `
+            <tr class="item-row"${index === receipt.items.length - 1 ? ' style="border-bottom:none"' : ''}>
               <td>
                 ${escapeHtml(item.name)}
                 ${item.size ? `<br><small style="color: #d4af37; font-weight: 600;">(${escapeHtml(item.size)})</small>` : ''}
@@ -341,13 +363,14 @@ function generateReportHtml(reports: any[]) {
           <div class="header">
             ${isSafeImageSrc(report.businessLogo) ? `<img src="${escapeHtml(report.businessLogo)}" alt="Logo" style="max-width: 80px; max-height: 80px; object-fit: contain; margin-bottom: 10px;" />` : ''}
             <div class="business-name">${escapeHtml(report.businessName)}</div>
-            <div class="report-title">${report.isShiftReport ? 'Shift Summary Report' : 'End Of Day Report'}</div>
+            <div class="report-title">End Of Day Report</div>
             <div class="date">${escapeHtml(report.date)}</div>
-            ${report.isShiftReport && report.cashierName ? `
+            ${report.cashierName ? `
               <div class="info" style="margin-top: 5px; font-weight: 600;">
-                Staff: ${escapeHtml(report.cashierName)} 
-                ${report.shiftDuration ? `&middot; Duration: ${escapeHtml(report.shiftDuration)}` : ''}
+                Staff: ${escapeHtml(report.cashierName)}
+                ${report.shiftDuration ? ` &middot; Duration: ${escapeHtml(report.shiftDuration)}` : ''}
               </div>
+              ${report.shiftTimeRange ? `<div class="info" style="margin-top: 4px; font-size: 12px; color: #666;">${escapeHtml(report.shiftTimeRange)}</div>` : ''}
             ` : ''}
           </div>
 

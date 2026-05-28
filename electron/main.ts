@@ -14,6 +14,7 @@ import { SecureStore } from './store/secure-store';
 import { registerSecureStoreHandlers } from './ipc/secure-store';
 import { registerNotificationHandlers } from './ipc/notifications';
 import { registerAttendanceHandlers } from './ipc/attendance';
+import { registerRestockHandlers } from './ipc/restock';
 import { registerUpdateHandlers } from './ipc/updates';
 import { initAutoUpdater, attachUpdateWindow, scheduleStartupUpdateCheck } from './updater';
 import { UPDATE_FEED_URL, USE_GITHUB_RELEASES } from './update-config';
@@ -322,6 +323,7 @@ app.whenReady().then(async () => {
   registerUserHandlers();
   registerNotificationHandlers(secureStore);
   registerAttendanceHandlers();
+  registerRestockHandlers();
   registerUpdateHandlers();
   initAutoUpdater();
 

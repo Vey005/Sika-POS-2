@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import TitleBar from './TitleBar';
 import Sidebar from './Sidebar';
 import CashierRouteGuard from './CashierRouteGuard';
+import UpdateFooter from './UpdateFooter';
 import styles from './AppShell.module.css';
 
 export default function AppShell() {
@@ -118,6 +119,7 @@ export default function AppShell() {
           <CashierRouteGuard>
             <Outlet />
           </CashierRouteGuard>
+          <UpdateFooter />
         </main>
       </div>
     </div>

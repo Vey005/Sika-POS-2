@@ -1,6 +1,15 @@
 import { ipcMain, dialog } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as XLSX from 'xlsx';
 import { getDb } from '../db/database';
+import { depleteStockFEFO, restoreStockToLatestBatch, setProductStockQuantity } from '../db/batch-helpers';
+import {
+  INVENTORY_TEMPLATE_SAMPLE,
+  parseImportItem,
+  productToExportRow,
+  rowsToCsv,
+} from '../utils/inventory-import-export';
 
 export interface Product {
   id?: number;
@@ -28,6 +37,45 @@ export interface Product {
   expiry_alert_months?: number | null;
   created_at?: string;
   updated_at?: string;
+}
+
+function isFileLockedError(err: unknown): boolean {
+  const e = err as { code?: string; errno?: number };
+  return e?.code === 'EBUSY' || e?.code === 'EPERM' || e?.errno === -4082;
+}
+
+/** Avoid EBUSY when Excel/other apps have the target file open. */
+function writeFileSafe(
+  filePath: string,
+  write: (targetPath: string) => void
+): { success: boolean; filePath: string; message?: string } {
+  try {
+    write(filePath);
+    return { success: true, filePath };
+  } catch (err) {
+    if (!isFileLockedError(err)) throw err;
+    const dir = path.dirname(filePath);
+    const ext = path.extname(filePath);
+    const base = path.basename(filePath, ext);
+    const altPath = path.join(dir, `${base}_${Date.now()}${ext}`);
+    try {
+      write(altPath);
+      return {
+        success: true,
+        filePath: altPath,
+        message:
+          'That file is open in another program (e.g. Excel). Saved under a new name instead. Close the old file before overwriting it.',
+      };
+    } catch (err2) {
+      if (!isFileLockedError(err2)) throw err2;
+      return {
+        success: false,
+        filePath,
+        message:
+          'Could not save — the file is in use. Close it in Excel or another app, then try again (or pick a different file name).',
+      };
+    }
+  }
 }
 
 function getDefaultExpiryAlertMonths(db: ReturnType<typeof getDb>): number {
@@ -106,6 +154,18 @@ export function registerInventoryHandlers() {
     return db.prepare(`SELECT * FROM products WHERE id = ?`).get(id) || null;
   });
 
+  ipcMain.handle('inventory:getStockLevels', (_event, ids: number[]) => {
+    const uniqueIds = [...new Set((ids || []).map(Number).filter(id => id > 0))];
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(',');
+    return db.prepare(`
+      SELECT id, name, barcode, category, unit_price, cost_price, stock_qty,
+             is_inventory, stock_unit, size, pack_size, pack_price, pack_label, tax_category
+      FROM products
+      WHERE is_active = 1 AND id IN (${placeholders})
+    `).all(...uniqueIds);
+  });
+
   ipcMain.handle('inventory:getLowStockCount', (_event) => {
     return (db.prepare(`
       SELECT COUNT(*) as count FROM products 
@@ -150,6 +210,8 @@ export function registerInventoryHandlers() {
           product.expiry_alert_months ?? null,
           product.id
         );
+
+        setProductStockQuantity(db, product.id, product.stock_qty, product.cost_price);
         
         // Push to sync queue (priority 5 for products)
         const updatedProduct = db.prepare(`SELECT * FROM products WHERE id = ?`).get(product.id);
@@ -182,7 +244,11 @@ export function registerInventoryHandlers() {
           product.size || null, product.image_path || null,
           product.expiry_alert_months ?? null
         );
-        const productId = result.lastInsertRowid;
+        const productId = Number(result.lastInsertRowid);
+
+        if (product.stock_qty > 0) {
+          setProductStockQuantity(db, productId, product.stock_qty, product.cost_price);
+        }
         
         // Push to sync queue (priority 5 for products)
         const newProduct = db.prepare(`SELECT * FROM products WHERE id = ?`).get(productId);
@@ -232,9 +298,13 @@ export function registerInventoryHandlers() {
   });
 
   ipcMain.handle('inventory:adjustStock', (_event, id: number, delta: number, _reason: string) => {
-    db.prepare(`
-      UPDATE products SET stock_qty = MAX(0, stock_qty + ?), updated_at = datetime('now') WHERE id = ?
-    `).run(delta, id);
+    if (delta > 0) {
+      // Positive adjustment → add to most recent batch
+      restoreStockToLatestBatch(db, id, delta);
+    } else if (delta < 0) {
+      // Negative adjustment → deplete FEFO
+      depleteStockFEFO(db, id, Math.abs(delta));
+    }
     
     // Push to sync queue (priority 5 for products)
     const adjustedProduct = db.prepare(`SELECT * FROM products WHERE id = ?`).get(id);
@@ -244,6 +314,19 @@ export function registerInventoryHandlers() {
     `).run(JSON.stringify(adjustedProduct));
 
     return { success: true };
+  });
+
+  // Get all batches for a product
+  ipcMain.handle('inventory:getBatches', (_event, productId: number) => {
+    return db.prepare(`
+      SELECT id, batch_number, expiry_date, cost_price, stock_qty, created_at
+      FROM product_batches
+      WHERE product_id = ?
+      ORDER BY
+        CASE WHEN expiry_date IS NULL OR trim(expiry_date) = '' THEN 1 ELSE 0 END,
+        expiry_date ASC,
+        created_at ASC
+    `).all(productId);
   });
 
   ipcMain.handle('inventory:getCategories', (_event) => {
@@ -283,28 +366,7 @@ export function registerInventoryHandlers() {
   });
 
   ipcMain.handle('inventory:downloadTemplate', async () => {
-    const template = [
-      {
-        'Product Name': 'Demo Product',
-        'Barcode': '1234567890',
-        'Category': 'General',
-        'Unit': 'each',
-        'Pack Label': 'Box',
-        'Pack Size': 10,
-        'Size': '500ml',
-        'Selling Price': 10.00,
-        'Pack Price': 90.00,
-        'Cost Price': 7.00,
-        'Stock Quantity': 100,
-        'Low Stock Threshold': 5,
-        'Tax Category (standard/zero_rated/exempt)': 'standard',
-        'Expiry product (0 or 1)': 0,
-        'Expiry alert months': '',
-        'Track Stock (0 or 1)': 1,
-        'Stock Unit (single/pack)': 'single',
-      }
-    ];
-    const worksheet = XLSX.utils.json_to_sheet(template);
+    const worksheet = XLSX.utils.json_to_sheet([INVENTORY_TEMPLATE_SAMPLE]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
 
@@ -314,11 +376,15 @@ export function registerInventoryHandlers() {
       filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
     });
 
-    if (filePath) {
-      XLSX.writeFile(workbook, filePath);
-      return { success: true, filePath };
+    if (!filePath) {
+      return { success: false, message: 'Save cancelled' };
     }
-    return { success: false };
+
+    const saved = writeFileSafe(filePath, (target) => XLSX.writeFile(workbook, target));
+    if (!saved.success) {
+      return { success: false, message: saved.message };
+    }
+    return { success: true, filePath: saved.filePath, message: saved.message };
   });
 
   ipcMain.handle('inventory:import', async () => {
@@ -338,50 +404,88 @@ export function registerInventoryHandlers() {
       const insertStmt = db.prepare(`
         INSERT INTO products (
           name, barcode, category, unit_price, cost_price, stock_qty, low_stock_threshold, tax_category,
-          is_pharmacy, is_inventory, unit, pack_label, pack_size, pack_price, size, stock_unit
+          is_pharmacy, is_inventory, unit, pack_label, pack_size, pack_price, size, stock_unit,
+          expiry_date, expiry_alert_months, batch_number, nafdac_number
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(barcode) DO UPDATE SET
           name = excluded.name,
           category = excluded.category,
           unit_price = excluded.unit_price,
           cost_price = excluded.cost_price,
           stock_qty = excluded.stock_qty,
+          low_stock_threshold = excluded.low_stock_threshold,
+          tax_category = excluded.tax_category,
+          is_pharmacy = excluded.is_pharmacy,
+          unit = excluded.unit,
           pack_label = excluded.pack_label,
           pack_size = excluded.pack_size,
           pack_price = excluded.pack_price,
           is_inventory = excluded.is_inventory,
           size = excluded.size,
           stock_unit = excluded.stock_unit,
+          expiry_date = excluded.expiry_date,
+          expiry_alert_months = excluded.expiry_alert_months,
+          batch_number = excluded.batch_number,
+          nafdac_number = excluded.nafdac_number,
           is_active = 1,
           updated_at = datetime('now')
       `);
 
+      const selectStmt = db.prepare(`
+        SELECT * FROM products WHERE barcode = ?
+      `);
+      const selectByNameStmt = db.prepare(`
+        SELECT * FROM products WHERE name = ? ORDER BY id DESC LIMIT 1
+      `);
+      const queueStmt = db.prepare(`
+        INSERT INTO sync_queue (entity, operation, payload, status, priority)
+        VALUES ('product', 'create', ?, 'pending', 5)
+      `);
+
       const transaction = db.transaction((items) => {
         for (const item of items) {
+          const row = parseImportItem(item as Record<string, unknown>);
+          const barcode = row.barcode;
+          const name = row.name;
+
           insertStmt.run(
-            item['Product Name'] || item['name'] || 'Unknown Item',
-            item['Barcode'] || item['barcode'] || null,
-            item['Category'] || item['category'] || 'General',
-            parseFloat(item['Selling Price'] || item['unit_price']) || 0,
-            parseFloat(item['Cost Price'] || item['cost_price']) || 0,
-            parseInt(item['Stock Quantity'] || item['stock_qty']) || 0,
-            parseInt(item['Low Stock Threshold'] || item['low_stock_threshold']) || 5,
-            item['Tax Category (standard/zero_rated/exempt)'] || item['tax_category'] || 'standard',
-            parseInt(item['Expiry product (0 or 1)'] || item['Pharmacy (0 or 1)'] || item['is_pharmacy']) || 0,
-            parseInt(item['Track Stock (0 or 1)'] ?? item['is_inventory'] ?? 1),
-            item['Unit'] || item['unit'] || 'each',
-            item['Pack Label'] || item['pack_label'] || 'Box',
-            Math.max(1, parseInt(item['Pack Size'] || item['pack_size']) || 1),
-            (() => {
-              const raw = item['Pack Price'] ?? item['pack_price'];
-              if (raw === undefined || raw === null || raw === '') return null;
-              const parsed = parseFloat(raw);
-              return Number.isFinite(parsed) ? parsed : null;
-            })(),
-            item['Size'] || item['size'] || null,
-            item['Stock Unit (single/pack)'] || item['stock_unit'] || 'single'
+            name,
+            barcode,
+            row.category,
+            row.unit_price,
+            row.cost_price,
+            row.stock_qty,
+            row.low_stock_threshold,
+            row.tax_category,
+            row.is_pharmacy,
+            row.is_inventory,
+            row.unit,
+            row.pack_label,
+            row.pack_size,
+            row.pack_price,
+            row.size,
+            row.stock_unit,
+            row.expiry_date,
+            row.expiry_alert_months,
+            row.batch_number,
+            row.nafdac_number
           );
+
+          const product = barcode
+            ? selectStmt.get(barcode)
+            : selectByNameStmt.get(name);
+
+          if (product) {
+            setProductStockQuantity(
+              db,
+              (product as Product).id!,
+              row.stock_qty,
+              row.cost_price
+            );
+            const synced = db.prepare(`SELECT * FROM products WHERE id = ?`).get((product as Product).id);
+            queueStmt.run(JSON.stringify(synced));
+          }
         }
       });
 
@@ -391,6 +495,54 @@ export function registerInventoryHandlers() {
       console.error('Import Error:', error);
       return { success: false, message: error.message };
     }
+  });
+
+  ipcMain.handle('inventory:exportInventory', async () => {
+    const products = db.prepare(`
+      SELECT * FROM products WHERE is_active = 1 ORDER BY name ASC
+    `).all() as Product[];
+
+    if (!products.length) {
+      return { success: false, message: 'No products found in inventory to export.' };
+    }
+
+    const rows = products.map((p) => productToExportRow(p as unknown as Record<string, unknown>));
+    const csv = rowsToCsv(rows);
+
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export Inventory',
+      defaultPath: `SikaPOS_Inventory_${new Date().toISOString().split('T')[0]}.csv`,
+      filters: [
+        { name: 'CSV Files', extensions: ['csv'] },
+        { name: 'Excel Files', extensions: ['xlsx'] },
+      ],
+    });
+
+    if (canceled || !filePath) {
+      return { success: false, message: 'Export cancelled' };
+    }
+
+    let saved: { success: boolean; filePath: string; message?: string };
+    if (filePath.toLowerCase().endsWith('.xlsx')) {
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory');
+      saved = writeFileSafe(filePath, (target) => XLSX.writeFile(workbook, target));
+    } else {
+      saved = writeFileSafe(filePath, (target) => {
+        fs.writeFileSync(target, '\uFEFF' + csv, 'utf8');
+      });
+    }
+
+    if (!saved.success) {
+      return { success: false, message: saved.message };
+    }
+    return {
+      success: true,
+      count: products.length,
+      filePath: saved.filePath,
+      message: saved.message,
+    };
   });
 
   // Clear all inventory (with cloud sync)

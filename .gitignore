@@ -11,10 +11,12 @@ release/
 build/
 out/
 
-# Desktop installers (publish via GitHub Releases, not git)
+# Desktop installers (hosted on server, not git)
 backend/updates/*.exe
 backend/updates/*.blockmap
 backend/updates/latest.yml
+backend/updates/releases/
+backend/updates/.last-installer.json
 
 # Environment variables
 .env
@@ -59,3 +61,14 @@ scratch/
 check_db.js
 check_local_db.js
 backend/check_db.js
+
+# Build and staging installers/binaries
+release-staging/
+app-update.yml
+backend/portal/dist/
+backend/portal/ios/App/App/public/
+backend/portal/android/app/src/main/assets/public/
+*.exe
+*.asar
+*.apk
+

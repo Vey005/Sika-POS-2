@@ -58,7 +58,7 @@
 
 .summaryCards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -157,6 +157,41 @@
   text-align: right;
 }
 
+.itemList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.itemName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.itemSize {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.itemQty {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--color-gold);
+}
+
 .emptyState {
   text-align: center;
   padding: 40px 20px;
@@ -226,6 +261,33 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+.pdfBtn {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0 16px;
+  height: 32px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pdfBtn:hover:not(:disabled) {
+  background: var(--color-elevated);
+  border-color: var(--color-gold);
+}
+
+.pdfBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .shiftMeta {

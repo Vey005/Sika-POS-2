@@ -39,6 +39,19 @@ const navItems: Array<{
     ),
   },
   {
+    id: 'restock',
+    path: '/restock',
+    label: 'Restock',
+    roles: ['admin', 'manager'],
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        <line x1="12" y1="8" x2="12" y2="16"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+    ),
+  },
+  {
     id: 'customers',
     path: '/customers',
     label: 'Customers',
@@ -95,6 +108,7 @@ const navItems: Array<{
 export default function Sidebar() {
   const [expanded, setExpanded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [pendingCount, setPendingCount] = useState<number>(0);
   const { user, cashierNavVisibility } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
 
@@ -108,8 +122,17 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (!window.sikapos?.sync) return;
-    const cleanup = window.sikapos.sync.onStatusChange((status) => {
+
+    // Fetch initial pending count
+    window.sikapos.sync.getPendingCount().then((count: number) => {
+      setPendingCount(count);
+    });
+
+    const cleanup = window.sikapos.sync.onStatusChange((status, count) => {
       setSyncStatus(status);
+      if (count !== undefined) {
+        setPendingCount(count);
+      }
     });
     return cleanup;
   }, []);
@@ -118,6 +141,24 @@ export default function Sidebar() {
     if (syncStatus === 'syncing' || !window.sikapos?.sync) return;
     setSyncStatus('syncing');
     await window.sikapos.sync.forceSync();
+  };
+
+  const getSyncColor = () => {
+    if (syncStatus === 'error') return '#EF4444';
+    if (syncStatus === 'syncing' || pendingCount > 0) return '#F59E0B';
+    return '#10B981';
+  };
+
+  const getSyncTitle = () => {
+    if (syncStatus === 'error') return `Sync Error (${pendingCount} left)`;
+    if (syncStatus === 'syncing') return `Syncing... (${pendingCount} left)`;
+    return pendingCount > 0 ? `${pendingCount} items pending` : 'Cloud Synced';
+  };
+
+  const getSyncLabel = () => {
+    if (syncStatus === 'error') return pendingCount > 0 ? `Sync Error (${pendingCount})` : 'Sync Error';
+    if (syncStatus === 'syncing') return pendingCount > 0 ? `Syncing (${pendingCount})` : 'Syncing...';
+    return pendingCount > 0 ? `${pendingCount} pending` : 'Cloud Synced';
   };
 
   return (
@@ -149,8 +190,8 @@ export default function Sidebar() {
         <button 
           className={styles.logoutBtn} 
           onClick={handleForceSync}
-          title={syncStatus === 'synced' ? 'Cloud Synced' : syncStatus === 'syncing' ? 'Syncing...' : 'Offline / Error'}
-          style={{ marginBottom: '8px', color: syncStatus === 'error' ? '#EF4444' : syncStatus === 'syncing' ? '#F59E0B' : '#10B981' }}
+          title={getSyncTitle()}
+          style={{ marginBottom: '8px', color: getSyncColor() }}
         >
           {syncStatus === 'syncing' ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 2s linear infinite' }}>
@@ -162,6 +203,10 @@ export default function Sidebar() {
               <line x1="12" y1="9" x2="12" y2="13"/>
               <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
+          ) : pendingCount > 0 ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 4s linear infinite' }}>
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
           ) : (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
@@ -169,7 +214,7 @@ export default function Sidebar() {
             </svg>
           )}
           <span className={styles.navLabel}>
-            {syncStatus === 'synced' ? 'Cloud Synced' : syncStatus === 'syncing' ? 'Syncing...' : 'Sync Error'}
+            {getSyncLabel()}
           </span>
         </button>
 

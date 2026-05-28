@@ -34,6 +34,7 @@ export default function HeldSalesModal({ onClose }: Props) {
     try {
       const cartData = JSON.parse(sale.payload);
       loadCart(cartData);
+      await useCartStore.getState().refreshStockLevels();
       await window.sikapos.sales.deleteHeld(sale.id);
       onClose();
     } catch (err) {
@@ -43,7 +44,7 @@ export default function HeldSalesModal({ onClose }: Props) {
   };
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
+    <div className={styles.overlay}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.header}>
           <h2 className={styles.title}>Held Sales</h2>

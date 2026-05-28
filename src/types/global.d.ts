@@ -16,6 +16,7 @@ interface Window {
       search: (query: string) => Promise<Product[]>;
       getByBarcode: (barcode: string) => Promise<Product | null>;
       getById: (id: number) => Promise<Product | null>;
+      getStockLevels: (ids: number[]) => Promise<Array<{ id: number; name: string; barcode?: string; category: string; unit_price: number; cost_price: number; stock_qty: number; is_inventory: number; stock_unit: string; size?: string; pack_size: number; pack_price?: number | null; pack_label?: string; tax_category: string }>>;
       save: (product: Partial<Product>) => Promise<{ id?: number; success: boolean; message?: string }>;
       delete: (id: number) => Promise<{ success: boolean; message?: string }>;
       adjustStock: (id: number, delta: number, reason: string) => Promise<{ success: boolean; message?: string }>;
@@ -25,8 +26,10 @@ interface Window {
       getExpiringCount: () => Promise<number>;
       getCategorySummary: () => Promise<Array<{ category: string; item_count: number; total_stock: number; total_value: number }>>;
       importFromExcel: () => Promise<{ success: boolean; count?: number; message?: string }>;
-      downloadTemplate: () => Promise<{ success: boolean; filePath?: string }>;
+      downloadTemplate: () => Promise<{ success: boolean; filePath?: string; message?: string }>;
+      exportInventory: () => Promise<{ success: boolean; count?: number; filePath?: string; message?: string }>;
       clearAll: () => Promise<{ success: boolean; count?: number; message?: string }>;
+      getBatches: (productId: number) => Promise<ProductBatch[]>;
     };
     sales: {
       create: (data: CreateTransactionInput) => Promise<TransactionResult>;
@@ -40,7 +43,11 @@ interface Window {
       hold: (data: { payload: any; customerName?: string }) => Promise<{ success: boolean; message?: string }>;
       getHeld: () => Promise<Array<{ id: number; payload: string; customer_name: string; created_at: string }>>;
       deleteHeld: (id: number) => Promise<{ success: boolean; message?: string }>;
-      getByShift: (params: { cashierName: string; clockIn: string; clockOut?: string }) => Promise<{ transactions: Transaction[]; summary: TodaySummary }>;
+      getByShift: (params: { cashierName: string; clockIn: string; clockOut?: string }) => Promise<{
+        transactions: Transaction[];
+        summary: TodaySummary;
+        itemSummary?: Array<{ product_name: string; total_qty: number; product_size?: string }>;
+      }>;
     };
     customers: {
       getAll: () => Promise<Customer[]>;
@@ -78,8 +85,10 @@ interface Window {
     sync: {
       forceSync: () => Promise<{ success: boolean }>;
       restore: () => Promise<{ success: boolean; count?: number; message?: string }>;
+      getPendingCount: () => Promise<number>;
       queueItem: (item: { entity: string; operation: string; payload: unknown; priority?: number }) => Promise<{ success: boolean }>;
-      onStatusChange: (callback: (status: 'synced' | 'syncing' | 'error') => void) => () => void;
+      onStatusChange: (callback: (status: 'synced' | 'syncing' | 'error', pendingCount?: number) => void) => () => void;
+      onUsersUpdated: (callback: () => void) => () => void;
     };
     users: {
       getAll: () => Promise<Array<{ id: number; name: string; role: string; created_at: string; updated_at: string; cashier_nav_visibility?: string | null }>>;
@@ -114,6 +123,27 @@ interface Window {
       clockOut: (userId: number) => Promise<{ success: boolean; message?: string }>;
       getStatus: (userId: number) => Promise<{ id: number; user_id: number; type: 'in' | 'out'; created_at: string } | null>;
       getHistory: (userId?: number, range?: { from?: string; to?: string }) => Promise<any[]>;
+    };
+    restock: {
+      getAll: (filters?: { search?: string; limit?: number }) => Promise<RestockInvoice[]>;
+      getById: (id: number) => Promise<RestockInvoiceWithItems | null>;
+      create: (input: {
+        invoice_number?: string;
+        supplier_name?: string;
+        notes?: string;
+        is_paid?: number;
+        created_by?: string;
+        items: Array<{
+          product_id: number;
+          product_name: string;
+          quantity: number;
+          cost_price: number;
+          expiry_date?: string;
+          batch_number?: string;
+        }>;
+      }) => Promise<{ success: boolean; id?: number; invoice_number?: string; message?: string }>;
+      delete: (id: number) => Promise<{ success: boolean; message?: string }>;
+      togglePaid: (id: number) => Promise<{ success: boolean; invoice?: RestockInvoice; message?: string }>;
     };
     updates: {
       getState: () => Promise<{
@@ -204,6 +234,8 @@ interface CartItem {
   stock_qty: number;
   is_inventory: number;
   tax_category: string;
+  adjusted_price?: number;
+  original_price?: number;
 }
 
 interface TaxBreakdown {
@@ -228,6 +260,8 @@ interface CreateTransactionInput {
   momo_reference?: string;
   order_type?: string;
   order_note?: string;
+  split_cash?: number;
+  split_momo?: number;
 }
 
 interface TransactionResult {
@@ -273,6 +307,8 @@ interface Transaction {
   momo_reference?: string;
   void_reason?: string;
   item_count?: number;
+  split_cash?: number;
+  split_momo?: number;
   created_at: string;
 }
 
@@ -342,4 +378,43 @@ interface BusinessSettings {
   receipt_config?: string;
   cashier_nav_visibility?: string;
   expiry_alert_months_default?: string;
+  tax_enabled?: string;
+}
+
+interface RestockInvoice {
+  id: number;
+  invoice_number: string;
+  supplier_name?: string;
+  notes?: string;
+  is_paid: number;
+  total_cost: number;
+  total_items: number;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RestockInvoiceItem {
+  id: number;
+  invoice_id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  cost_price: number;
+  expiry_date?: string;
+  batch_number?: string;
+  created_at: string;
+}
+
+interface RestockInvoiceWithItems extends RestockInvoice {
+  items: RestockInvoiceItem[];
+}
+
+interface ProductBatch {
+  id: number;
+  batch_number?: string;
+  expiry_date?: string;
+  cost_price: number;
+  stock_qty: number;
+  created_at: string;
 }

@@ -1,12 +1,23 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../store/auth';
+import { getApiUrl, API_CONFIG } from '../config/api';
+import {
+  getReportDateRange,
+  validateCustomDateRange,
+  type ReportDateFilter,
+} from '../utils/reportDateRange';
 import {
   RefreshCw,
   Eye,
   X,
   Calendar,
   Printer,
+  ChevronDown,
+  Receipt,
 } from 'lucide-react';
+import { buildItemSummaryFromTransactions, buildShiftReportPayload } from '../utils/shiftReport';
+import { openEodReportPrint } from '../utils/eodReportPrint';
+import { paymentMethodLabel } from '../utils/paymentDisplay';
 
 interface TodaySummary {
   total_revenue: number;
@@ -26,6 +37,9 @@ interface Transaction {
   customer_name?: string;
   grand_total: number;
   payment_method: string;
+  split_cash?: number;
+  split_momo?: number;
+  change_given?: number;
   status: string;
   item_count: number;
   items?: any[];
@@ -63,9 +77,106 @@ export default function Reports() {
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
-  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'allTime' | 'custom'>('today');
+  const [dateFilter, setDateFilter] = useState<ReportDateFilter>('today');
   const [customDate, setCustomDate] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
+  const [printing, setPrinting] = useState(false);
+  const [periodOpen, setPeriodOpen] = useState(false);
+
+  const [selectedAttendance, setSelectedAttendance] = useState<AttendanceLog | null>(null);
+  const [attendanceSales, setAttendanceSales] = useState<any[]>([]);
+  const [attendanceShiftSummary, setAttendanceShiftSummary] = useState<{
+    total_revenue: number;
+    transaction_count: number;
+    cash_total: number;
+    momo_total: number;
+    card_total: number;
+    credit_total: number;
+    debt_recovered?: number;
+  } | null>(null);
+  const [attendanceItemSummary, setAttendanceItemSummary] = useState<any[]>([]);
+  const [loadingAttendanceSales, setLoadingAttendanceSales] = useState(false);
+  const [shiftReportPrinting, setShiftReportPrinting] = useState(false);
+  const [attendanceSalesError, setAttendanceSalesError] = useState('');
+
+  const handleAttendanceClick = async (log: AttendanceLog) => {
+    setSelectedAttendance(log);
+    setLoadingAttendanceSales(true);
+    setAttendanceSales([]);
+    setAttendanceShiftSummary(null);
+    setAttendanceItemSummary([]);
+    setAttendanceSalesError('');
+    try {
+      const params = new URLSearchParams({
+        includeItems: 'true',
+        cashierName: log.user_name,
+      });
+      const res = await fetch(getApiUrl(`/api/portal/reports/attendance/${log.id}/sales?${params}`), {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAttendanceSalesError((data as { error?: string }).error || `Could not load shift sales (${res.status})`);
+        return;
+      }
+      setAttendanceSales(data.transactions || []);
+      setAttendanceShiftSummary({
+        total_revenue: data.summary?.total_revenue || 0,
+        transaction_count: data.summary?.transaction_count || 0,
+        cash_total: data.summary?.cash_total || 0,
+        momo_total: data.summary?.momo_total || 0,
+        card_total: data.summary?.card_total || 0,
+        credit_total: data.summary?.credit_total || 0,
+        debt_recovered: data.summary?.debt_recovered || 0,
+      });
+      setAttendanceItemSummary(data.itemSummary || []);
+    } catch (err) {
+      console.error('Failed to fetch shift sales:', err);
+      setAttendanceSalesError('Network error loading shift sales. Check your connection and try again.');
+    } finally {
+      setLoadingAttendanceSales(false);
+    }
+  };
+
+  const displayAttendanceItemSummary = useMemo(() => {
+    if (attendanceItemSummary.length > 0) return attendanceItemSummary;
+    return buildItemSummaryFromTransactions(attendanceSales);
+  }, [attendanceItemSummary, attendanceSales]);
+
+  const handleShiftReportPrint = () => {
+    if (!selectedAttendance || !attendanceShiftSummary) return;
+    const data = buildShiftReportPayload({
+      log: selectedAttendance,
+      summary: attendanceShiftSummary,
+      transactions: attendanceSales,
+      businessName: businessName || 'SikaPOS',
+      businessLogo: businessLogo || undefined,
+      itemSummary: displayAttendanceItemSummary,
+    });
+
+    setShiftReportPrinting(true);
+    try {
+      const staffLine = `Staff: ${data.cashierName} · Duration: ${data.shiftDuration} · ${data.shiftTimeRange}`;
+      const fileDate = data.reportFileDate || selectedAttendance.clock_in.slice(0, 10);
+      const safeName = data.cashierName.replace(/[^\w\-]+/g, '-').replace(/-+/g, '-');
+      openEodReportPrint({
+        businessName: data.businessName,
+        businessLogo: data.businessLogo,
+        dateLabel: data.date,
+        staffLine,
+        documentTitle: `EOD Report - ${safeName} - ${fileDate}`,
+        summary: data.summary,
+        transactions: data.transactions,
+        itemSummary: data.itemSummary.map((row) => ({
+          product_name: row.product_name,
+          total_qty: row.total_qty,
+        })),
+        formatCurrency: (n) => formatCurrency(Number(n) || 0),
+      });
+    } finally {
+      setTimeout(() => setShiftReportPrinting(false), 600);
+    }
+  };
 
   // Fetch full details when a transaction is selected
   useEffect(() => {
@@ -73,7 +184,7 @@ export default function Reports() {
     if (selectedTx && (!selectedTx.items || (selectedTx.items.length === 0 && selectedTx.item_count > 0))) {
       const fetchDetails = async () => {
         try {
-          const res = await fetch(`/api/portal/sales/${selectedTx.id}`, {
+          const res = await fetch(getApiUrl(`/api/portal/sales/${selectedTx.id}`), {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (res.ok) {
@@ -92,69 +203,7 @@ export default function Reports() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Calculate date range based on filter
-      // We send date-only strings (YYYY-MM-DD) to the server for SQL DATE() comparison
-      // IMPORTANT: Use local date components (getFullYear/getMonth/getDate) not toISOString() 
-      // because toISOString() converts to UTC which can shift the date
-      const fmt = (d: Date): string => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-      };
-
-      const today = new Date();
-      const todayStr = fmt(today);
-      
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      const yesterdayStr = fmt(yesterday);
-
-      let fromStr: string;
-      let toStr: string;
-      
-      switch (dateFilter) {
-        case 'today':
-          fromStr = todayStr;
-          toStr = todayStr;
-          break;
-        case 'yesterday':
-          fromStr = yesterdayStr;
-          toStr = yesterdayStr;
-          break;
-        case 'lastWeek': {
-          // Last 7 days (not including today)
-          const weekEnd = new Date(today);
-          weekEnd.setDate(today.getDate() - 1); // yesterday
-          const weekStart = new Date(today);
-          weekStart.setDate(today.getDate() - 7); // 7 days ago
-          fromStr = fmt(weekStart);
-          toStr = fmt(weekEnd);
-          break;
-        }
-        case 'thisMonth':
-          fromStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-          toStr = todayStr;
-          break;
-        case 'lastMonth': {
-          const lmStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-          const lmEnd = new Date(today.getFullYear(), today.getMonth(), 0); // last day of prev month
-          fromStr = fmt(lmStart);
-          toStr = fmt(lmEnd);
-          break;
-        }
-        case 'allTime':
-          fromStr = '2000-01-01';
-          toStr = '2100-12-31';
-          break;
-        case 'custom':
-          fromStr = customDate || todayStr;
-          toStr = customDateTo || customDate || todayStr;
-          break;
-        default:
-          fromStr = todayStr;
-          toStr = todayStr;
-      }
+      const { from: fromStr, to: toStr } = getReportDateRange(dateFilter, customDate, customDateTo);
       
       if (activeTab === 'sales') {
         // Use a SINGLE data source for both summary and transactions
@@ -164,7 +213,7 @@ export default function Reports() {
         params.set('to', toStr);
         params.set('limit', '200');
         
-        const txRes = await fetch(`/api/portal/sales?${params}`, {
+        const txRes = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.SALES}?${params}`), {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -185,45 +234,28 @@ export default function Reports() {
           setTransactions(txData.transactions || []);
         }
       } else if (activeTab === 'inventory') {
-        // Load inventory summary
-        const [invRes, catRes] = await Promise.all([
-          fetch('/api/portal/inventory/overview', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch('/api/portal/inventory', {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-        ]);
+        const invRes = await fetch(getApiUrl('/api/portal/inventory/overview'), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         if (invRes.ok) {
           const invData = await invRes.json();
           setInvSummary(invData.totals);
-        }
-
-        if (catRes.ok) {
-          const catData = await catRes.json();
-          // Calculate category summary from products
-          const categoryMap = new Map<string, CategorySummary>();
-          (catData.products || []).forEach((product: any) => {
-            const cat = product.category || 'General';
-            if (!categoryMap.has(cat)) {
-              categoryMap.set(cat, {
-                category: cat,
-                item_count: 0,
-                total_stock: 0,
-                total_value: 0,
-              });
-            }
-            const summary = categoryMap.get(cat)!;
-            summary.item_count++;
-            summary.total_stock += parseInt(product.stock_qty || 0);
-            summary.total_value += parseFloat(product.unit_price || 0) * parseInt(product.stock_qty || 0);
-          });
-          setCategorySummary(Array.from(categoryMap.values()));
+          setCategorySummary(invData.categories || []);
         }
       } else if (activeTab === 'attendance') {
-        // Attendance would need a separate endpoint - for now show empty
-        setAttendanceLogs([]);
+        const params = new URLSearchParams();
+        params.set('from', fromStr);
+        params.set('to', toStr);
+        const attRes = await fetch(getApiUrl(`/api/portal/reports/attendance?${params}`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (attRes.ok) {
+          const attData = await attRes.json();
+          setAttendanceLogs(attData || []);
+        } else {
+          setAttendanceLogs([]);
+        }
       }
     } catch (err: any) {
       console.error('Failed to load reports:', err);
@@ -235,37 +267,95 @@ export default function Reports() {
     }
   }, [activeTab, token, dateFilter, customDate, customDateTo]);
 
-  const handlePrintReport = async () => {
-    try {
-      const fromStr = dateFilter === 'custom' ? customDate : 
-                     dateFilter === 'today' ? new Date().toISOString().split('T')[0] :
-                     dateFilter === 'yesterday' ? new Date(Date.now() - 86400000).toISOString().split('T')[0] :
-                     new Date(Date.now() - (parseInt(dateFilter) || 7) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      const toStr = dateFilter === 'custom' ? customDateTo : new Date().toISOString().split('T')[0];
+  const fetchAllSalesForPrint = async (fromStr: string, toStr: string) => {
+    const allTransactions: Transaction[] = [];
+    let summary: TodaySummary | null = null;
+    let page = 1;
+    let totalPages = 1;
 
-      // Fetch detailed data for printing
-      const [salesRes, reportsRes] = await Promise.all([
-        fetch(`/api/portal/sales?from=${fromStr}&to=${toStr}&includeItems=true&limit=500`, {
-          headers: { Authorization: `Bearer ${token}` }
+    do {
+      const params = new URLSearchParams({
+        from: fromStr,
+        to: toStr,
+        includeItems: 'true',
+        limit: '100',
+        page: String(page),
+      });
+      const res = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.SALES}?${params}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error((errBody as { error?: string }).error || 'Failed to fetch sales for print');
+      }
+      const data = await res.json();
+      if (data.summary) {
+        summary = {
+          total_revenue: data.summary.total_revenue || 0,
+          transaction_count: data.summary.transaction_count || 0,
+          avg_basket: data.summary.avg_basket || 0,
+          cash_total: data.summary.cash_total || 0,
+          momo_total: data.summary.momo_total || 0,
+          card_total: data.summary.card_total || 0,
+          credit_total: data.summary.credit_total || 0,
+        };
+      }
+      allTransactions.push(...(data.transactions || []));
+      totalPages = data.pagination?.pages || 1;
+      page += 1;
+    } while (page <= totalPages);
+
+    return {
+      summary: summary || {
+        total_revenue: 0,
+        transaction_count: 0,
+        avg_basket: 0,
+        cash_total: 0,
+        momo_total: 0,
+        card_total: 0,
+        credit_total: 0,
+      },
+      transactions: allTransactions,
+    };
+  };
+
+  const handlePrintReport = async () => {
+    const validationError = validateCustomDateRange(dateFilter, customDate);
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
+
+    setPrinting(true);
+    try {
+      const { from: fromStr, to: toStr, label: dateLabel } = getReportDateRange(
+        dateFilter,
+        customDate,
+        customDateTo
+      );
+
+      const [salesData, reportsRes] = await Promise.all([
+        fetchAllSalesForPrint(fromStr, toStr),
+        fetch(getApiUrl(`/api/portal/reports?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`), {
+          headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`/api/portal/reports?from=${fromStr}&to=${toStr}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
       ]);
 
-      if (!salesRes.ok || !reportsRes.ok) throw new Error('Failed to fetch detailed report data');
+      if (!reportsRes.ok) {
+        const errBody = await reportsRes.json().catch(() => ({}));
+        throw new Error((errBody as { error?: string }).error || 'Failed to fetch report summary');
+      }
 
-      const salesData = await salesRes.json();
       const reportsData = await reportsRes.json();
+      const topProducts = reportsData.topProducts || [];
 
       const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
+      if (!printWindow) {
+        alert('Pop-up blocked. Allow pop-ups for this site to print the report.');
+        return;
+      }
 
       const logo = useAuthStore.getState().businessLogo || '';
-      const dateLabel = dateFilter === 'today' ? new Date().toLocaleDateString('en-GH') : 
-                        dateFilter === 'yesterday' ? new Date(Date.now() - 86400000).toLocaleDateString('en-GH') :
-                        `${fromStr} to ${toStr}`;
 
       const html = `
         <!DOCTYPE html>
@@ -383,13 +473,13 @@ export default function Reports() {
                 <tr class="row-zebra">
                   <td class="tx-receipt">${tx.receipt_number}</td>
                   <td>${new Date(tx.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit', hour12: true })}</td>
-                  <td>${tx.payment_method.toUpperCase()}</td>
+                  <td>${paymentMethodLabel(tx.payment_method, tx)}</td>
                   <td style="text-align: right; font-weight: 700;">GHS ${formatCurrency(tx.grand_total)}</td>
                 </tr>
                 ${tx.items && tx.items.length > 0 ? tx.items.map((item: any) => `
                   <tr>
                     <td colspan="4" class="item-row">
-                      ${item.product_name} <span>(1kg)</span> × ${item.quantity}
+                      ${item.product_name} × ${item.quantity}
                       <span style="float: right; color: #888; font-weight: 400;">GHS ${formatCurrency(item.line_total)}</span>
                     </td>
                   </tr>
@@ -407,12 +497,12 @@ export default function Reports() {
               </tr>
             </thead>
             <tbody>
-              ${reportsData.topProducts.map((p: any) => `
+              ${topProducts.length > 0 ? topProducts.map((p: { name: string; quantity: number }) => `
                 <tr>
-                  <td>${p.name} <span>(1kg)</span></td>
+                  <td>${p.name}</td>
                   <td style="text-align: right; font-weight: 700;">× ${p.quantity}</td>
                 </tr>
-              `).join('')}
+              `).join('') : '<tr><td colspan="2" style="text-align:center;color:#888;">No items sold in this period</td></tr>'}
             </tbody>
           </table>
 
@@ -434,19 +524,15 @@ export default function Reports() {
 
       printWindow.document.write(html);
       printWindow.document.close();
-    } catch (err: any) {
-      alert('Failed to generate report: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert('Failed to generate report: ' + message);
+    } finally {
+      setPrinting(false);
     }
   };
 
   useEffect(() => { load(); }, [load, dateFilter, customDate, customDateTo]);
-
-  const paymentMethodLabel = (method: string) => {
-    const map: Record<string, string> = {
-      cash: '💵 Cash', momo: '📱 MoMo', card: '💳 Card', credit: '📋 Credit',
-    };
-    return map[method] || method;
-  };
 
   const formatCurrency = (val: number) =>
     `${(val || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -485,16 +571,6 @@ export default function Reports() {
             padding: 10px 8px !important;
             font-size: 12px !important;
           }
-          .tabs-container {
-            overflow-x: auto;
-            white-space: nowrap;
-            -webkit-overflow-scrolling: touch;
-            padding-bottom: 4px;
-          }
-          .tabs-container button {
-            padding: 10px 12px !important;
-            font-size: 13px !important;
-          }
           .glass-panel {
             padding: 16px !important;
           }
@@ -504,176 +580,204 @@ export default function Reports() {
         }
       `}</style>
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
           <div>
-            <h1 style={{ fontSize: '28px', marginBottom: '8px' }}>Reports</h1>
-            <p style={{ color: 'var(--text-muted)' }}>Sales history & analytics</p>
+            <h1 style={{ fontSize: 'clamp(24px, 5vw, 32px)', marginBottom: '4px' }}>Reports</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Sales history & analytics</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={handlePrintReport}
+              type="button"
+              onClick={() => load()}
+              disabled={loading}
+              className="btn-secondary"
               style={{
+                padding: '10px 16px',
+                fontSize: '14px',
+                minHeight: '48px',
+                borderRadius: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '10px 16px',
-                background: 'var(--primary)',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                color: '#000',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '600',
-                transition: 'all 0.2s',
               }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 6 2 18 2 18 9"/>
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                <rect x="6" y="14" width="12" height="8"/>
-              </svg>
-              Print Report
+              <RefreshCw size={16} className={loading ? 'spin' : ''} />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintReport}
+              disabled={printing || (dateFilter === 'custom' && !customDate)}
+              className="btn-primary"
+              style={{
+                opacity: printing || (dateFilter === 'custom' && !customDate) ? 0.6 : 1,
+                padding: '10px 18px',
+                fontSize: '14px',
+                minHeight: '48px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Printer size={18} />
+              {printing ? 'Preparing…' : 'Print Report'}
             </button>
           </div>
         </div>
         
-        {/* Date Filter */}
+        {/* Date Filter Bar */}
         <div className="glass-panel" style={{ 
-          padding: '16px', 
+          padding: '12px 16px',
           marginTop: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          width: '100%'
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid var(--border-light)',
+          borderRadius: '16px',
+          overflow: 'visible',
+          position: 'relative',
+          zIndex: 50,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <Calendar size={16} style={{ color: 'var(--primary)' }} />
-            <span style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-main)' }}>Date Filter</span>
-          </div>
-          
-          <div className="filter-buttons" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {[
-              { value: 'today', label: 'Today' },
-              { value: 'yesterday', label: 'Yesterday' },
-              { value: 'lastWeek', label: 'Last Week' },
-              { value: 'thisMonth', label: 'This Month' },
-              { value: 'lastMonth', label: 'Last Month' },
-              { value: 'allTime', label: 'All Time' },
-              { value: 'custom', label: 'Custom' }
-            ].map((filter) => (
-              <button
-                key={filter.value}
-                onClick={() => setDateFilter(filter.value as any)}
-                style={{
-                  padding: '8px 16px',
-                  background: dateFilter === filter.value 
-                    ? 'var(--primary)' 
-                    : 'rgba(212, 160, 23, 0.1)',
-                  border: dateFilter === filter.value 
-                    ? '1px solid var(--primary)' 
-                    : '1px solid rgba(212, 160, 23, 0.3)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: dateFilter === filter.value 
-                    ? '#000' 
-                    : 'var(--primary)',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-          
-          {dateFilter === 'custom' && (
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px',
-              flexWrap: 'wrap',
-              marginTop: '8px'
-            }}>
-              <input 
-                type="date" 
-                value={customDate} 
-                style={{
-                  padding: '8px 12px',
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                }}
-                onChange={e => setCustomDate(e.target.value)} 
-              />
-              <span style={{ color: 'var(--text-muted)' }}>to</span>
-              <input 
-                type="date" 
-                value={customDateTo} 
-                style={{
-                  padding: '8px 12px',
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                }}
-                onChange={e => setCustomDateTo(e.target.value)} 
-              />
-              <button
-                onClick={() => load()}
-                disabled={!customDate}
-                style={{
-                  padding: '8px 16px',
-                  background: customDate ? 'var(--primary)' : 'rgba(212, 160, 23, 0.2)',
-                  border: '1px solid var(--primary)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: customDate ? '#000' : 'var(--text-muted)',
-                  cursor: customDate ? 'pointer' : 'not-allowed',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                  opacity: customDate ? 1 : 0.6,
-                }}
-              >
-                Apply
-              </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '36px', height: '36px', borderRadius: '10px',
+                background: 'rgba(212, 160, 23, 0.1)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Calendar size={18} style={{ color: 'var(--primary)' }} />
+              </div>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setPeriodOpen(!periodOpen)}
+                  className="portal-select"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 14px',
+                    background: 'rgba(0,0,0,0.2)',
+                    minHeight: '44px',
+                    borderRadius: '10px',
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{
+                    dateFilter === 'today' ? 'Today' :
+                    dateFilter === 'yesterday' ? 'Yesterday' :
+                    dateFilter === 'lastWeek' ? 'Last Week' :
+                    dateFilter === 'thisMonth' ? 'This Month' :
+                    dateFilter === 'lastMonth' ? 'Last Month' :
+                    dateFilter === 'allTime' ? 'All Time' :
+                    'Custom Range'
+                  }</span>
+                  <ChevronDown size={16} style={{ opacity: 0.7, transform: periodOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+
+                {periodOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 8px)',
+                      left: 0,
+                      minWidth: '220px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-strong)',
+                      borderRadius: '16px',
+                      boxShadow: 'var(--elevation-3)',
+                      zIndex: 150,
+                      overflow: 'hidden',
+                      animation: 'menuDropIn 0.25s var(--motion-decelerate) both',
+                    }}
+                  >
+                    {[
+                      { value: 'today', label: 'Today' },
+                      { value: 'yesterday', label: 'Yesterday' },
+                      { value: 'lastWeek', label: 'Last Week' },
+                      { value: 'thisMonth', label: 'This Month' },
+                      { value: 'lastMonth', label: 'Last Month' },
+                      { value: 'allTime', label: 'All Time' },
+                      { value: 'custom', label: 'Custom Date Range' }
+                    ].map((filter) => (
+                      <button
+                        key={filter.value}
+                        type="button"
+                        onClick={() => {
+                          setDateFilter(filter.value as any);
+                          setPeriodOpen(false);
+                        }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '12px 16px',
+                          border: 'none',
+                          borderBottom: '1px solid var(--border-light)',
+                          background: dateFilter === filter.value ? 'var(--primary-glow)' : 'transparent',
+                          color: dateFilter === filter.value ? 'var(--primary)' : 'var(--text-main)',
+                          fontSize: 14,
+                          fontWeight: dateFilter === filter.value ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'background 0.2s',
+                        }}
+                      >
+                        {filter.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+            
+            {dateFilter === 'custom' && (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input 
+                  type="date" 
+                  value={customDate} 
+                  className="portal-date-input"
+                  onChange={e => setCustomDate(e.target.value)} 
+                />
+                <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>to</span>
+                <input 
+                  type="date" 
+                  value={customDateTo} 
+                  className="portal-date-input"
+                  onChange={e => setCustomDateTo(e.target.value)} 
+                />
+                <button
+                  onClick={() => load()}
+                  disabled={!customDate}
+                  className="btn-primary"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    borderRadius: '8px',
+                    minHeight: 'auto',
+                    opacity: customDate ? 1 : 0.6,
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="tabs-container" style={{ 
-        display: 'flex', 
-        borderBottom: '1px solid var(--border-light)', 
-        marginBottom: '24px',
-        gap: '4px'
-      }}>
+      <div className="tabs-container report-tabs" style={{ marginBottom: '24px' }}>
         {[
-          { id: 'sales', label: 'Sales Performance' },
-          { id: 'inventory', label: 'Inventory Overview' },
-          { id: 'attendance', label: 'Attendance Logs' },
+          { id: 'sales', label: 'Sales Performance', shortLabel: 'Sales' },
+          { id: 'inventory', label: 'Inventory Overview', shortLabel: 'Inventory' },
+          { id: 'attendance', label: 'Attendance Logs', shortLabel: 'Attendance' },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            style={{
-              padding: '12px 20px',
-              background: activeTab === tab.id ? 'var(--bg-surface)' : 'transparent',
-              border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
-              color: activeTab === tab.id ? 'var(--text-main)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: activeTab === tab.id ? '600' : '400',
-              transition: 'all 0.2s',
-            }}
+            className={`report-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
           >
-            {tab.label}
+            <span className="tab-label-desktop">{tab.label}</span>
+            <span className="tab-label-mobile">{tab.shortLabel}</span>
           </button>
         ))}
       </div>
@@ -681,43 +785,43 @@ export default function Reports() {
       {/* Content */}
       <div style={{ minHeight: '400px' }}>
         {activeTab === 'sales' && (
-          <>
+          <div className="animate-fade-in">
             {summary && (
               <div style={{ marginBottom: 'clamp(20px, 5vw, 32px)' }}>
-                <div className="stats-grid">
-                  <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 20px)' }}>
-                    <p style={{ fontSize: 'clamp(10px, 2.5vw, 12px)', color: 'var(--text-muted)', marginBottom: '4px' }}>Revenue</p>
-                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '600', color: 'var(--text-main)', wordBreak: 'break-word' }}>
+                <div className="stat-grid">
+                  <div className="glass-panel" style={{ padding: '20px', borderLeft: '4px solid var(--primary)' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Total Revenue</p>
+                    <p style={{ fontSize: 'clamp(20px, 4vw, 28px)', fontWeight: '700', color: 'var(--text-main)', wordBreak: 'break-word', letterSpacing: '-0.02em' }}>
                       GHS {formatCurrency(summary.total_revenue)}
                     </p>
                   </div>
-                  <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 20px)' }}>
-                    <p style={{ fontSize: 'clamp(10px, 2.5vw, 12px)', color: 'var(--text-muted)', marginBottom: '4px' }}>Transactions</p>
-                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '600', color: 'var(--text-main)' }}>
+                  <div className="glass-panel" style={{ padding: '20px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Transactions</p>
+                    <p style={{ fontSize: 'clamp(20px, 4vw, 28px)', fontWeight: '700', color: 'var(--text-main)' }}>
                       {summary.transaction_count}
                     </p>
                   </div>
-                  <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 20px)' }}>
-                    <p style={{ fontSize: 'clamp(10px, 2.5vw, 12px)', color: 'var(--text-muted)', marginBottom: '4px' }}>Avg Basket</p>
-                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '600', color: 'var(--text-main)', wordBreak: 'break-word' }}>
-                      GHS {formatCurrency(summary.avg_basket)}
-                    </p>
-                  </div>
-                  <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 20px)' }}>
-                    <p style={{ fontSize: 'clamp(10px, 2.5vw, 12px)', color: 'var(--text-muted)', marginBottom: '4px' }}>Cash</p>
-                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '600', color: 'var(--text-main)', wordBreak: 'break-word' }}>
+                  <div className="glass-panel" style={{ padding: '20px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Cash Total</p>
+                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '700', color: 'var(--success)' }}>
                       GHS {formatCurrency(summary.cash_total)}
                     </p>
                   </div>
-                  <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 20px)' }}>
-                    <p style={{ fontSize: 'clamp(10px, 2.5vw, 12px)', color: 'var(--text-muted)', marginBottom: '4px' }}>MoMo</p>
-                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '600', color: 'var(--text-main)', wordBreak: 'break-word' }}>
+                  <div className="glass-panel" style={{ padding: '20px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>MoMo Total</p>
+                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '700', color: '#8B5CF6' }}>
                       GHS {formatCurrency(summary.momo_total)}
                     </p>
                   </div>
-                  <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 20px)', borderLeft: summary.credit_total > 0 ? '3px solid var(--danger)' : undefined }}>
-                    <p style={{ fontSize: 'clamp(10px, 2.5vw, 12px)', color: 'var(--text-muted)', marginBottom: '4px' }}>Credit</p>
-                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '600', color: 'var(--text-main)', wordBreak: 'break-word' }}>
+                  <div className="glass-panel" style={{ padding: '20px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Card Total</p>
+                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '700', color: '#3B82F6' }}>
+                      GHS {formatCurrency(summary.card_total)}
+                    </p>
+                  </div>
+                  <div className="glass-panel" style={{ padding: '20px', borderLeft: summary.credit_total > 0 ? '4px solid var(--danger)' : undefined }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Outstanding Debt</p>
+                    <p style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: '700', color: summary.credit_total > 0 ? 'var(--danger)' : 'var(--text-main)' }}>
                       GHS {formatCurrency(summary.credit_total)}
                     </p>
                   </div>
@@ -727,7 +831,7 @@ export default function Reports() {
 
             <div className="glass-panel" style={{ padding: 'clamp(16px, 4vw, 24px)' }}>
               <h2 style={{ fontSize: 'clamp(16px, 4vw, 18px)', marginBottom: 'clamp(16px, 4vw, 20px)', color: 'var(--text-main)' }}>Transaction History</h2>
-              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <div className="hide-mobile table-scroll">
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
@@ -780,7 +884,7 @@ export default function Reports() {
                           {tx.customer_name || <span style={{ color: 'var(--text-muted)' }}>Walk-in</span>}
                         </td>
                         <td style={{ padding: 'clamp(8px, 2vw, 12px)', fontFamily: 'monospace', fontSize: 'clamp(10px, 2.5vw, 12px)' }}>{tx.item_count}</td>
-                        <td style={{ padding: 'clamp(8px, 2vw, 12px)', fontSize: 'clamp(11px, 2.5vw, 13px)' }}>{paymentMethodLabel(tx.payment_method)}</td>
+                        <td style={{ padding: 'clamp(8px, 2vw, 12px)', fontSize: 'clamp(11px, 2.5vw, 13px)' }}>{paymentMethodLabel(tx.payment_method, tx)}</td>
                         <td style={{ padding: 'clamp(8px, 2vw, 12px)', fontWeight: '600', fontSize: 'clamp(11px, 2.5vw, 13px)', wordBreak: 'break-word' }}>
                           GHS {formatCurrency(tx.grand_total)}
                         </td>
@@ -791,15 +895,15 @@ export default function Reports() {
                             fontSize: 'clamp(9px, 2vw, 11px)',
                             fontWeight: '600',
                             background: tx.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 
-                                       tx.status === 'voided' ? 'rgba(239, 68, 68, 0.1)' : 
+                                       tx.status === 'voided' || tx.status === 'reversed' ? 'rgba(239, 68, 68, 0.1)' : 
                                        tx.status === 'debt' ? 'rgba(249, 115, 22, 0.1)' :
                                        'rgba(245, 158, 11, 0.1)',
                             color: tx.status === 'completed' ? '#10B981' : 
-                                   tx.status === 'voided' ? '#EF4444' : 
+                                   tx.status === 'voided' || tx.status === 'reversed' ? '#EF4444' : 
                                    tx.status === 'debt' ? '#FB923C' :
                                    '#F59E0B',
                           }}>
-                            {tx.status === 'debt' ? 'Owes' : tx.status}
+                            {tx.status === 'debt' ? 'Owes' : tx.status === 'reversed' ? 'Reversed' : tx.status}
                           </span>
                         </td>
                         <td style={{ padding: 'clamp(8px, 2vw, 12px)' }}>
@@ -823,15 +927,72 @@ export default function Reports() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card List */}
+              <div className="hide-desktop portal-card-list" style={{ padding: 0 }}>
+                {loading ? (
+                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <RefreshCw size={24} className="spin" style={{ opacity: 0.5 }} />
+                  </div>
+                ) : transactions.length === 0 ? (
+                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No transactions found for this period
+                  </div>
+                ) : (
+                  transactions.map(tx => {
+                    const statusClass = tx.status === 'completed' ? 'completed' : tx.status === 'voided' || tx.status === 'reversed' ? 'failed' : 'warning';
+                    return (
+                      <div 
+                        key={tx.id} 
+                        className="data-card animate-fade-in"
+                        onClick={() => setSelectedTx(tx)}
+                        style={{ cursor: 'pointer', marginBottom: '6px' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ padding: '6px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                              <Receipt size={14} style={{ color: 'var(--primary)' }} />
+                            </div>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-main)', fontSize: '14px' }}>{tx.receipt_number}</span>
+                          </div>
+                          <span className={`status-pill status-${statusClass}`}>
+                            {tx.status}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                          <span>Cashier: <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>{tx.cashier_name}</strong></span>
+                          <span style={{ color: 'var(--border-strong)' }}>|</span>
+                          <span>Payment: <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>{paymentMethodLabel(tx.payment_method, tx)}</strong></span>
+                        </div>
+
+                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                              {new Date(tx.created_at).toLocaleDateString('en-GH')} · {new Date(tx.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginTop: '2px', fontWeight: 500 }}>{tx.item_count} items</span>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '18px', letterSpacing: '-0.02em' }}>
+                              GHS {formatCurrency(tx.grand_total)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </>
+          </div>
         )}
 
         {activeTab === 'inventory' && (
           <div className="glass-panel" style={{ padding: '24px' }}>
             {invSummary && (
               <div style={{ marginBottom: '32px' }}>
-                <div className="stats-grid">
+                <div className="stat-grid">
                   <div className="glass-panel" style={{ padding: '20px' }}>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Total Stock Items</p>
                     <p style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-main)' }}>
@@ -861,7 +1022,7 @@ export default function Reports() {
             )}
 
             <h2 style={{ fontSize: '18px', marginBottom: '20px', color: 'var(--text-main)' }}>Stock Value by Category</h2>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-scroll">
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
@@ -907,7 +1068,7 @@ export default function Reports() {
         {activeTab === 'attendance' && (
           <div className="glass-panel" style={{ padding: '24px' }}>
             <h2 style={{ fontSize: '18px', marginBottom: '20px', color: 'var(--text-main)' }}>Attendance Logs</h2>
-            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div className="hide-mobile table-scroll">
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
@@ -939,7 +1100,17 @@ export default function Reports() {
                     const mins = duration ? duration % 60 : 0;
 
                     return (
-                      <tr key={log.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                      <tr 
+                        key={log.id} 
+                        style={{ 
+                          borderBottom: '1px solid var(--border-light)',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s'
+                        }}
+                        onClick={() => handleAttendanceClick(log)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212, 160, 23, 0.05)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                      >
                         <td style={{ padding: '12px', fontWeight: '600' }}>{log.user_name}</td>
                         <td style={{ padding: '12px' }}>{new Date(log.clock_in).toLocaleDateString('en-GH')}</td>
                         <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '12px' }}>
@@ -972,48 +1143,112 @@ export default function Reports() {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Card List */}
+            <div className="hide-desktop portal-card-list" style={{ padding: 0 }}>
+              {loading ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Loading logs...
+                </div>
+              ) : attendanceLogs.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No attendance logs found for this period
+                </div>
+              ) : (
+                attendanceLogs.map(log => {
+                  const duration = log.clock_out 
+                    ? Math.round((new Date(log.clock_out).getTime() - new Date(log.clock_in).getTime()) / (1000 * 60))
+                    : null;
+                  const hours = duration ? Math.floor(duration / 60) : 0;
+                  const mins = duration ? duration % 60 : 0;
+
+                  return (
+                    <div 
+                      key={log.id} 
+                      className="data-card"
+                      onClick={() => handleAttendanceClick(log)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '15px' }}>{log.user_name}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          {new Date(log.clock_in).toLocaleDateString('en-GH')}
+                        </span>
+                      </div>
+
+                      <div className="data-card-row">
+                        <span className="data-card-label">Clock In</span>
+                        <span style={{ fontFamily: 'monospace', fontSize: '13px', color: 'var(--text-main)' }}>
+                          {new Date(log.clock_in).toLocaleTimeString('en-GH')}
+                        </span>
+                      </div>
+
+                      <div className="data-card-row">
+                        <span className="data-card-label">Clock Out</span>
+                        <span>
+                          {log.clock_out ? (
+                            <span style={{ fontFamily: 'monospace', fontSize: '13px', color: 'var(--text-main)' }}>
+                              {new Date(log.clock_out).toLocaleTimeString('en-GH')}
+                            </span>
+                          ) : (
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              background: 'rgba(16, 185, 129, 0.1)',
+                              color: '#10B981',
+                            }}>
+                              Still In
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="data-card-row" style={{ marginTop: '10px', paddingTop: '6px', borderTop: '1px solid var(--border-light)' }}>
+                        <span className="data-card-label">Duration</span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: '600', color: 'var(--primary)' }}>
+                          {duration !== null ? `${hours}h ${mins}m` : '---'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Transaction Receipt Modal */}
-      {selectedTx && (
-        <div className="receipt-print-container" style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px',
-          backdropFilter: 'blur(4px)',
-        }} onClick={() => setSelectedTx(null)}>
-          <div className="glass-panel receipt-animation" style={{
-            maxWidth: '400px',
-            width: '100%',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            position: 'relative',
-            background: '#fff',
-            color: '#000',
-            padding: '0',
-            borderRadius: '0', // Thermal receipt style
-            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
-          }} onClick={e => e.stopPropagation()}>
+      {/* Selected Attendance Shift Sales Modal */}
+      {selectedAttendance && (
+        <div
+          className="modal-overlay"
+          style={{ backdropFilter: 'blur(6px)' }}
+          onClick={() => setSelectedAttendance(null)}
+        >
+          <div
+            className="glass-panel modal-panel"
+            style={{
+              maxWidth: 650,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '90vh',
+              overflow: 'hidden',
+              padding: '0',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             
-            {/* Close Button (Fixed) */}
+            {/* Close Button */}
             <button
-              onClick={() => setSelectedTx(null)}
-              className="no-print"
+              onClick={() => setSelectedAttendance(null)}
               style={{
                 position: 'absolute',
-                top: '10px',
-                right: '10px',
-                background: 'rgba(0,0,0,0.05)',
+                top: '16px',
+                right: '16px',
+                background: 'rgba(255,255,255,0.05)',
                 border: 'none',
                 width: '32px',
                 height: '32px',
@@ -1022,130 +1257,542 @@ export default function Reports() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
+                color: 'var(--text-main)',
+                transition: 'all 0.2s',
                 zIndex: 10,
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
             >
               <X size={18} />
             </button>
 
-            <div style={{ padding: '30px 20px' }}>
-              {/* Receipt Header */}
-              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                {businessLogo && (
-                  <img src={businessLogo} style={{ width: '60px', height: '60px', objectFit: 'contain', marginBottom: '10px' }} />
+            {/* Scrollable Modal Body */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+
+            {/* Header */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', paddingRight: '40px' }}>
+                <div>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    textTransform: 'uppercase',
+                    color: 'var(--primary)',
+                    letterSpacing: '1px',
+                  }}>
+                    Shift Report & Sales
+                  </span>
+                  <h2 style={{ fontSize: '22px', fontWeight: '700', margin: '4px 0 0', color: 'var(--text-main)' }}>
+                    {selectedAttendance.user_name}
+                  </h2>
+                </div>
+                {!loadingAttendanceSales && !attendanceSalesError && (
+                  <button
+                    type="button"
+                    onClick={handleShiftReportPrint}
+                    disabled={shiftReportPrinting}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      background: 'var(--primary)',
+                      color: '#000',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: shiftReportPrinting ? 'wait' : 'pointer',
+                      opacity: shiftReportPrinting ? 0.7 : 1,
+                    }}
+                    title="End-of-day style report — print or Save as PDF from the dialog"
+                  >
+                    <Printer size={14} />
+                    {shiftReportPrinting ? 'Opening…' : 'Print Report'}
+                  </button>
                 )}
-                <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0', textTransform: 'uppercase' }}>{businessName || 'SikaPOS Shop'}</h2>
-                <p style={{ fontSize: '12px', margin: '4px 0', color: '#666' }}>OFFICIAL RECEIPT</p>
+              </div>
+              
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '12px',
+                background: 'rgba(0,0,0,0.2)',
+                padding: '12px',
+                borderRadius: 'var(--radius-sm, 6px)',
+                fontSize: '13px',
+                color: 'var(--text-muted)',
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', opacity: 0.6 }}>Clocked In</div>
+                  <div style={{ fontWeight: '500', color: 'var(--text-main)', marginTop: '2px' }}>
+                    {new Date(selectedAttendance.clock_in).toLocaleString('en-GH')}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', opacity: 0.6 }}>Clocked Out</div>
+                  <div style={{ fontWeight: '500', color: 'var(--text-main)', marginTop: '2px' }}>
+                    {selectedAttendance.clock_out 
+                      ? new Date(selectedAttendance.clock_out).toLocaleString('en-GH') 
+                      : 'Still Clocked In'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', opacity: 0.6 }}>Shift Duration</div>
+                  <div style={{ fontWeight: '500', color: 'var(--text-main)', marginTop: '2px' }}>
+                    {(() => {
+                      const duration = selectedAttendance.clock_out 
+                        ? Math.round((new Date(selectedAttendance.clock_out).getTime() - new Date(selectedAttendance.clock_in).getTime()) / (1000 * 60))
+                        : Math.round((new Date().getTime() - new Date(selectedAttendance.clock_in).getTime()) / (1000 * 60));
+                      const hours = Math.floor(duration / 60);
+                      const mins = duration % 60;
+                      return `${hours}h ${mins}m`;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {attendanceSalesError && (
+              <div style={{
+                marginBottom: '16px',
+                padding: '12px 14px',
+                borderRadius: '6px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                color: '#FCA5A5',
+                fontSize: '13px',
+              }}>
+                {attendanceSalesError}
+              </div>
+            )}
+
+            {/* Shift Summary Cards */}
+            {!loadingAttendanceSales && !attendanceSalesError && attendanceShiftSummary && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: '12px',
+                marginBottom: '24px',
+              }}>
+                <div className="glass-panel" style={{ padding: '16px', background: 'rgba(212, 160, 23, 0.05)', border: '1px solid rgba(212, 160, 23, 0.15)' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Shift Revenue</div>
+                  <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--primary)', marginTop: '4px' }}>
+                    GHS {formatCurrency(attendanceShiftSummary.total_revenue)}
+                  </div>
+                </div>
+                <div className="glass-panel" style={{ padding: '16px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Transactions</div>
+                  <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-main)', marginTop: '4px' }}>
+                    {attendanceShiftSummary.transaction_count}
+                  </div>
+                </div>
+                <div className="glass-panel" style={{ padding: '16px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Cash</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', marginTop: '4px' }}>
+                    GHS {formatCurrency(attendanceShiftSummary.cash_total)}
+                  </div>
+                </div>
+                <div className="glass-panel" style={{ padding: '16px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>MoMo</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', marginTop: '4px' }}>
+                    GHS {formatCurrency(attendanceShiftSummary.momo_total)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sales Table */}
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)' }}>
+                Processed Transactions
+              </h3>
+              
+              {loadingAttendanceSales ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '150px' }}>
+                  <RefreshCw size={24} className="spin" style={{ opacity: 0.5 }} />
+                </div>
+              ) : attendanceSalesError ? null : attendanceSales.length === 0 ? (
+                <div style={{
+                  padding: '30px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  background: 'rgba(0,0,0,0.1)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '13px',
+                }}>
+                  No transactions registered for this cashier during this shift.
+                </div>
+              ) : (
+                <>
+                  <div className="hide-mobile table-scroll">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-muted)' }}>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '500' }}>Receipt No</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '500' }}>Time</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '500' }}>Method</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '500' }}>Total</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '500' }}>Status</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '500' }}>View</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendanceSales.map(tx => (
+                          <tr key={tx.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                            <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: '500' }}>
+                              {tx.receipt_number}
+                            </td>
+                            <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>
+                              {new Date(tx.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td style={{ padding: '10px 12px', textTransform: 'capitalize' }}>
+                              {paymentMethodLabel(tx.payment_method, tx)}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600', color: 'var(--text-main)' }}>
+                              GHS {formatCurrency(parseFloat(tx.grand_total))}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                background: tx.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 
+                                           tx.status === 'voided' || tx.status === 'reversed' ? 'rgba(239, 68, 68, 0.1)' : 
+                                           tx.status === 'debt' ? 'rgba(249, 115, 22, 0.1)' :
+                                           'rgba(245, 158, 11, 0.1)',
+                                color: tx.status === 'completed' ? '#10B981' : 
+                                       tx.status === 'voided' || tx.status === 'reversed' ? '#EF4444' : 
+                                       tx.status === 'debt' ? '#FB923C' :
+                                       '#F59E0B',
+                              }}>
+                                {tx.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => {
+                                  setSelectedAttendance(null);
+                                  setSelectedTx(tx);
+                                }}
+                                style={{
+                                  padding: '4px 6px',
+                                  background: 'rgba(212, 160, 23, 0.1)',
+                                  border: '1px solid var(--primary)',
+                                  borderRadius: '4px',
+                                  color: 'var(--primary)',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <Eye size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card List */}
+                  <div className="hide-desktop portal-card-list" style={{ padding: 0 }}>
+                    {attendanceSales.map(tx => (
+                      <div 
+                        key={tx.id} 
+                        className="data-card"
+                        style={{ background: 'rgba(255,255,255,0.01)', marginBottom: '8px' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-main)' }}>{tx.receipt_number}</span>
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            background: tx.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 
+                                       tx.status === 'voided' || tx.status === 'reversed' ? 'rgba(239, 68, 68, 0.1)' : 
+                                       tx.status === 'debt' ? 'rgba(249, 115, 22, 0.1)' :
+                                       'rgba(245, 158, 11, 0.1)',
+                            color: tx.status === 'completed' ? '#10B981' : 
+                                   tx.status === 'voided' || tx.status === 'reversed' ? '#EF4444' : 
+                                   tx.status === 'debt' ? '#FB923C' :
+                                   '#F59E0B',
+                          }}>
+                            {tx.status}
+                          </span>
+                        </div>
+
+                        <div className="data-card-row">
+                          <span className="data-card-label">Time</span>
+                          <span style={{ color: 'var(--text-main)', fontSize: '13px' }}>
+                            {new Date(tx.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        <div className="data-card-row">
+                          <span className="data-card-label">Method</span>
+                          <span style={{ textTransform: 'capitalize', color: 'var(--text-main)', fontSize: '13px' }}>
+                            {paymentMethodLabel(tx.payment_method, tx)}
+                          </span>
+                        </div>
+
+                        <div className="data-card-row" style={{ marginTop: '10px', paddingTop: '6px', borderTop: '1px solid var(--border-light)' }}>
+                          <span className="data-card-label">Total</span>
+                          <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '14px' }}>
+                            GHS {formatCurrency(parseFloat(tx.grand_total))}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                          <button
+                            onClick={() => {
+                              setSelectedAttendance(null);
+                              setSelectedTx(tx);
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              background: 'rgba(212, 160, 23, 0.1)',
+                              border: '1px solid var(--primary)',
+                              borderRadius: '6px',
+                              color: 'var(--primary)',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                            }}
+                          >
+                            <Eye size={12} /> View Receipt
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {!loadingAttendanceSales && !attendanceSalesError && (
+              <div style={{ marginTop: '24px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)' }}>
+                  Items Sold Summary
+                </h3>
+                {displayAttendanceItemSummary.length === 0 ? (
+                  <div style={{
+                    padding: '24px',
+                    textAlign: 'center',
+                    color: 'var(--text-muted)',
+                    background: 'rgba(0,0,0,0.1)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '13px',
+                  }}>
+                    No items sold during this shift.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {displayAttendanceItemSummary.map((item, idx) => (
+                      <div
+                        key={`${item.product_name}-${item.product_size || ''}-${idx}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid var(--border-light)',
+                          borderRadius: 'var(--radius-sm, 6px)',
+                          fontSize: '13px',
+                        }}
+                      >
+                        <span style={{ color: 'var(--text-main)' }}>
+                          {item.product_name}
+                          {item.product_size ? (
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                              ({item.product_size})
+                            </span>
+                          ) : null}
+                        </span>
+                        <span style={{ fontWeight: '700', fontFamily: 'monospace', color: 'var(--primary)' }}>
+                          × {Number.isInteger(Number(item.total_qty)) ? item.total_qty : Number(item.total_qty).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Receipt Modal */}
+      {selectedTx && (
+        <div className="modal-overlay receipt-print-container" style={{
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+        }} onClick={() => setSelectedTx(null)}>
+          <div className="glass-panel modal-panel receipt-animation" style={{
+            maxWidth: '420px',
+            width: '100%',
+            background: '#fff',
+            color: '#000',
+            padding: '0',
+            borderRadius: '24px',
+            boxShadow: '0 30px 60px rgba(0,0,0,0.5)',
+            border: 'none',
+          }} onClick={e => e.stopPropagation()}>
+            
+            <div style={{ padding: '40px 24px' }}>
+              {/* Receipt Header */}
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{
+                  width: '64px', height: '64px', background: '#f8f9fa',
+                  borderRadius: '16px', margin: '0 auto 16px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {businessLogo ? (
+                    <img src={businessLogo} style={{ width: '48px', height: '48px', objectFit: 'contain' }} alt="Logo" />
+                  ) : (
+                    <span style={{ fontSize: '24px', fontWeight: 800 }}>₵</span>
+                  )}
+                </div>
+                <h2 style={{ fontSize: '20px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{businessName || 'SikaPOS Shop'}</h2>
+                <div style={{ display: 'inline-block', padding: '4px 12px', background: '#000', color: '#fff', borderRadius: '4px', fontSize: '10px', fontWeight: 700, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Official Receipt</div>
               </div>
 
               {/* Transaction Meta */}
-              <div style={{ fontSize: '13px', marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span>Receipt #:</span>
-                  <span style={{ fontWeight: '600' }}>{selectedTx.receipt_number}</span>
+              <div style={{ fontSize: '13px', marginBottom: '20px', color: '#444' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 500 }}>Receipt No.</span>
+                  <span style={{ fontWeight: '700', fontFamily: 'monospace' }}>{selectedTx.receipt_number}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span>Date:</span>
-                  <span>{new Date(selectedTx.created_at).toLocaleDateString('en-GH')}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 500 }}>Date & Time</span>
+                  <span>{new Date(selectedTx.created_at).toLocaleDateString('en-GH')} · {new Date(selectedTx.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span>Time:</span>
-                  <span>{new Date(selectedTx.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span>Cashier:</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 500 }}>Cashier</span>
                   <span>{selectedTx.cashier_name}</span>
                 </div>
                 {selectedTx.customer_name && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span>Customer:</span>
-                    <span>{selectedTx.customer_name}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 500 }}>Customer</span>
+                    <span style={{ fontWeight: 600 }}>{selectedTx.customer_name}</span>
                   </div>
                 )}
               </div>
 
               {/* Dotted Divider */}
-              <div style={{ borderTop: '1px dashed #ccc', margin: '15px 0' }} />
+              <div style={{ borderTop: '2px dotted #eee', margin: '20px 0' }} />
 
               {/* Items Table */}
-              <div style={{ marginBottom: '15px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 40px 80px', fontSize: '12px', fontWeight: '700', marginBottom: '8px', textTransform: 'uppercase' }}>
-                  <span>Item</span>
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 40px 100px', fontSize: '11px', fontWeight: '800', marginBottom: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <span>Description</span>
                   <span style={{ textAlign: 'center' }}>Qty</span>
                   <span style={{ textAlign: 'right' }}>Total</span>
                 </div>
                 
-                {/* We need to fetch items if they aren't here. 
-                    For now, we'll assume they might be in a 'fullDetails' state we'll add */}
                 {selectedTx.items ? selectedTx.items.map((item: any, idx: number) => (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 80px', fontSize: '13px', marginBottom: '6px' }}>
+                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 100px', fontSize: '14px', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: '500' }}>{item.product_name}</span>
-                      <span style={{ fontSize: '11px', color: '#666' }}>@ GHS {formatCurrency(item.unit_price)}</span>
+                      <span style={{ fontWeight: '600' }}>{item.product_name}</span>
+                      <span style={{ fontSize: '11px', color: '#888' }}>@ GHS {formatCurrency(item.unit_price)}</span>
                     </div>
-                    <span style={{ textAlign: 'center' }}>{item.quantity}</span>
-                    <span style={{ textAlign: 'right' }}>GHS {formatCurrency(item.line_total)}</span>
+                    <span style={{ textAlign: 'center', fontWeight: 500 }}>{item.quantity}</span>
+                    <span style={{ textAlign: 'right', fontWeight: 600 }}>GHS {formatCurrency(item.line_total)}</span>
                   </div>
                 )) : (
-                  <div style={{ textAlign: 'center', padding: '10px', fontSize: '12px', color: '#888' }}>
-                    Loading items...
+                  <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', color: '#888' }}>
+                    Loading item details...
                   </div>
                 )}
               </div>
 
               {/* Dotted Divider */}
-              <div style={{ borderTop: '1px dashed #ccc', margin: '15px 0' }} />
+              <div style={{ borderTop: '2px dotted #eee', margin: '20px 0' }} />
 
               {/* Totals */}
-              <div style={{ fontSize: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span>Subtotal:</span>
+              <div style={{ fontSize: '15px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ color: '#666' }}>Subtotal</span>
                   <span>GHS {formatCurrency(selectedTx.grand_total - (selectedTx.total_tax || 0))}</span>
                 </div>
                 {(selectedTx.total_tax || 0) > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span>Tax:</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#666' }}>Tax</span>
                     <span>GHS {formatCurrency(selectedTx.total_tax || 0)}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '18px', fontWeight: '800', borderTop: '1px solid #000', paddingTop: '10px' }}>
-                  <span>TOTAL:</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', fontSize: '24px', fontWeight: '900', borderTop: '2px solid #000', paddingTop: '16px', letterSpacing: '-0.02em' }}>
+                  <span>TOTAL</span>
                   <span>GHS {formatCurrency(selectedTx.grand_total)}</span>
                 </div>
               </div>
 
               {/* Payment Info */}
-              <div style={{ marginTop: '20px', fontSize: '12px', textAlign: 'center' }}>
-                <p style={{ margin: '4px 0' }}>Payment: <span style={{ fontWeight: '700' }}>{selectedTx.payment_method.toUpperCase()}</span></p>
-                <p style={{ margin: '4px 0' }}>Status: <span style={{ fontWeight: '700', color: selectedTx.status === 'completed' ? '#10B981' : '#EF4444' }}>{selectedTx.status.toUpperCase()}</span></p>
+              <div style={{ marginTop: '24px', padding: '16px', background: '#f8f9fa', borderRadius: '12px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: '#666' }}>Payment Mode</span>
+                  <span style={{ fontWeight: '700', textTransform: 'capitalize' }}>{paymentMethodLabel(selectedTx.payment_method, selectedTx)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#666' }}>Payment Status</span>
+                  <span style={{ fontWeight: '800', color: selectedTx.status === 'completed' ? '#10B981' : '#EF4444' }}>{selectedTx.status.toUpperCase()}</span>
+                </div>
               </div>
 
               {/* Footer */}
-              <div style={{ marginTop: '30px', textAlign: 'center', fontSize: '11px', color: '#888', fontStyle: 'italic' }}>
-                <p>Thank you for your business!</p>
-                <p>Powered by SikaPOS</p>
+              <div style={{ marginTop: '40px', textAlign: 'center' }}>
+                <p style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px' }}>Thank you for shopping!</p>
+                <p style={{ fontSize: '12px', color: '#888', margin: 0 }}>Powered by SikaPOS (DanniTech Solutions)</p>
               </div>
 
               {/* Actions (No Print) */}
-              <div className="no-print" style={{ display: 'flex', gap: '10px', marginTop: '30px' }}>
+              <div className="no-print" style={{ display: 'flex', gap: '12px', marginTop: '40px' }}>
                 <button 
-                  onClick={() => window.print()}
+                  onClick={() => setSelectedTx(null)}
                   style={{
                     flex: 1,
-                    padding: '12px',
+                    padding: '14px',
+                    background: '#f1f3f5',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  style={{
+                    flex: 1.5,
+                    padding: '14px',
                     background: '#000',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '600',
+                    borderRadius: '12px',
+                    fontWeight: '700',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
+                    boxShadow: '0 10px 20px rgba(0,0,0,0.2)',
                   }}
                 >
-                  <Printer size={16} /> Print
+                  <Printer size={18} /> Print Receipt
                 </button>
               </div>
             </div>

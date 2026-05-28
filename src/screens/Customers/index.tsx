@@ -216,7 +216,7 @@ export default function CustomersScreen() {
 
       {/* Payment Modal */}
       {showPayModal && payCustomer && (
-        <div className={styles.overlay} onClick={e => e.target === e.currentTarget && setShowPayModal(false)}>
+        <div className={styles.overlay}>
           <div className={styles.modal} style={{ maxWidth: '400px' }}>
             <div className={styles.modalHeader}>
               <h2>Record Payment: {payCustomer.name}</h2>
@@ -268,7 +268,7 @@ export default function CustomersScreen() {
 
       {/* Add/Edit form */}
       {showForm && editCustomer && (
-        <div className={styles.overlay} onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+        <div className={styles.overlay}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
               <h2>{editCustomer.id ? 'Edit Customer' : 'Add Customer'}</h2>
@@ -322,7 +322,7 @@ export default function CustomersScreen() {
 
       {/* Profile view */}
       {selected && (
-        <div className={styles.overlay} onClick={e => e.target === e.currentTarget && setSelected(null)}>
+        <div className={styles.overlay}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
               <h2>{selected.name}</h2>

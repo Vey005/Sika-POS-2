@@ -1,13 +1,108 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const compression = require('compression');
 const crypto = require('crypto');
 const cluster = require('cluster');
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Updates upload directory setup
+const updatesDir = path.join(__dirname, 'updates');
+const releasesArchiveDir = path.join(updatesDir, 'releases');
+if (!fs.existsSync(updatesDir)) {
+  fs.mkdirSync(updatesDir, { recursive: true });
+}
+if (!fs.existsSync(releasesArchiveDir)) {
+  fs.mkdirSync(releasesArchiveDir, { recursive: true });
+}
+
+const lastInstallerMetaPath = path.join(updatesDir, '.last-installer.json');
+
+function parseLatestYml(content) {
+  const versionMatch = content.match(/^version:\s*['"]?([^'"\n]+)['"]?/m);
+  const pathMatch = content.match(/^path:\s*['"]?([^'"\n]+)['"]?/m);
+  const shaMatch = content.match(/^sha512:\s*([A-Za-z0-9+/=]+)/m);
+  return {
+    version: versionMatch ? versionMatch[1].trim() : null,
+    path: pathMatch ? pathMatch[1].trim() : null,
+    sha512: shaMatch ? shaMatch[1].trim() : null,
+  };
+}
+
+/** electron-updater expects URL-safe installer names (spaces → hyphens). */
+function toUpdateSafeFilename(name) {
+  return String(name || '').replace(/\s+/g, '-');
+}
+
+function sha512Base64OfFile(filePath) {
+  const hash = crypto.createHash('sha512');
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest('base64');
+}
+
+/** Build latest.yml from the installer on disk so sha512/size always match the hosted .exe */
+function buildLatestYmlFromInstaller({ version, installerPath, installerFilename }) {
+  const safeName = toUpdateSafeFilename(installerFilename);
+  const stat = fs.statSync(installerPath);
+  const sha512 = sha512Base64OfFile(installerPath);
+  const releaseDate = new Date().toISOString();
+  return {
+    safeName,
+    sha512,
+    size: stat.size,
+    content: `version: ${version}
+files:
+  - url: ${safeName}
+    sha512: ${sha512}
+    size: ${stat.size}
+path: ${safeName}
+sha512: ${sha512}
+releaseDate: '${releaseDate}'
+`,
+  };
+}
+
+function resolveInstallerFile(updatesRoot, ymlPath, fallbackSafeName) {
+  const candidates = new Set();
+  if (ymlPath) {
+    candidates.add(ymlPath);
+    candidates.add(ymlPath.replace(/\s+/g, '-'));
+    candidates.add(ymlPath.replace(/-/g, ' '));
+  }
+  if (fallbackSafeName) {
+    candidates.add(fallbackSafeName);
+    candidates.add(fallbackSafeName.replace(/\s+/g, '-'));
+  }
+  for (const name of candidates) {
+    const full = path.join(updatesRoot, name);
+    if (fs.existsSync(full)) return { full, filename: path.basename(full) };
+  }
+  return null;
+}
+
+async function saveAppReleaseRecord({ version, installerFilename, installerPath, installerSize, ymlPath, uploadedBy }) {
+  await pool.query('UPDATE app_releases SET is_current = false WHERE is_current = true');
+  const result = await pool.query(
+    `INSERT INTO app_releases (version, installer_filename, installer_path, installer_size, yml_path, is_current, uploaded_by)
+     VALUES ($1, $2, $3, $4, $5, true, $6)
+     RETURNING id, version, installer_filename, installer_size, is_current, created_at`,
+    [version, installerFilename, installerPath, installerSize, ymlPath, uploadedBy || null]
+  );
+  return result.rows[0];
+}
+
+// Multer config for app updates
+const updatesStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, updatesDir),
+  filename: (req, file, cb) => cb(null, file.originalname)
+});
+const uploadUpdate = multer({ storage: updatesStorage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB max per chunk
 
 // Secrets from environment
 const PIN_SALT = process.env.PIN_SALT || 'sikapos-gha-pin-v1-d4nn1t3ch';
@@ -53,6 +148,7 @@ function rateLimit(req, res, next) {
 }
 
 // Middleware
+app.use(compression());
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 // (Static middleware removed from here and moved to bottom for better route priority)
@@ -224,12 +320,13 @@ async function replicatePayloadToReplicaTables(businessId, entity, operation, pa
     }
     case 'users': {
       const users = Array.isArray(payload) ? payload : [payload];
-      const insertUser = `INSERT INTO users (business_id, local_id, name, pin, role, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
+      const insertUser = `INSERT INTO users (business_id, local_id, name, pin, role, cashier_nav_visibility, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         ON CONFLICT (business_id, local_id) DO UPDATE SET
           name = EXCLUDED.name,
           pin = EXCLUDED.pin,
           role = EXCLUDED.role,
+          cashier_nav_visibility = EXCLUDED.cashier_nav_visibility,
           updated_at = EXCLUDED.updated_at`;
 
       for (const userPayload of users) {
@@ -239,6 +336,7 @@ async function replicatePayloadToReplicaTables(businessId, entity, operation, pa
           userPayload.name || 'User',
           userPayload.pin || '',
           userPayload.role || 'cashier',
+          userPayload.cashier_nav_visibility ?? null,
           userPayload.created_at ? new Date(userPayload.created_at) : now,
           userPayload.updated_at ? new Date(userPayload.updated_at) : now
         ]);
@@ -246,10 +344,89 @@ async function replicatePayloadToReplicaTables(businessId, entity, operation, pa
       console.log(`[Replicate Users] Successfully synced ${users.length} users for business ${obfuscateKey(businessId)}`);
       return;
     }
+    case 'attendance': {
+      const records = Array.isArray(payload) ? payload : [payload];
+      const insertRecord = `
+        INSERT INTO attendance (business_id, local_id, user_id, type, created_at)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (business_id, local_id) DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          type = EXCLUDED.type,
+          created_at = EXCLUDED.created_at
+      `;
+      for (const rec of records) {
+        await q.query(insertRecord, [
+          businessId,
+          rec.local_id ?? rec.id,
+          rec.user_id,
+          rec.type,
+          rec.created_at ? new Date(rec.created_at) : now
+        ]);
+      }
+      console.log(`[Replicate Attendance] Successfully synced ${records.length} logs for business ${obfuscateKey(businessId)}`);
+      return;
+    }
+    case 'restock_invoice': {
+      const itemsJson = JSON.stringify(payload.items || []);
+      // Delete existing to avoid duplication, then insert (bypasses ON CONFLICT constraint requirement)
+      await q.query(
+        `DELETE FROM cloud_restock_orders WHERE business_id = $1 AND invoice_number = $2`,
+        [businessId, payload.invoice_number]
+      );
+      await q.query(
+        `INSERT INTO cloud_restock_orders (business_id, invoice_number, supplier_name, notes, is_paid, created_by, status, items, new_products, created_at, applied_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'applied', $7, '[]'::jsonb, $8, $8)`,
+        [
+          businessId,
+          payload.invoice_number,
+          payload.supplier_name || null,
+          payload.notes || null,
+          payload.is_paid ? true : false,
+          payload.created_by || 'POS Cashier',
+          itemsJson,
+          payload.created_at || now
+        ]
+      );
+      return;
+    }
     case 'transaction': {
+      if (operation === 'update' && localId != null && payload.status) {
+        const voidReason = payload.reason || payload.void_reason || null;
+        const status = String(payload.status).toLowerCase();
+        const zeroPaid = status === 'voided' || status === 'reversed';
+        const updateParams = zeroPaid
+          ? [businessId, localId, status, voidReason, now, 0]
+          : [businessId, localId, status, voidReason, now];
+        const paidClause = zeroPaid ? ', paid_amount = $6' : '';
+
+        let updateResult = await q.query(
+          `UPDATE transactions SET status = $3, void_reason = COALESCE($4, void_reason), updated_at = $5${paidClause}
+           WHERE business_id = $1 AND local_id = $2`,
+          updateParams
+        );
+
+        const receiptNumber = payload.receipt_number || payload.receiptNumber;
+        if (updateResult.rowCount === 0 && receiptNumber) {
+          updateResult = await q.query(
+            `UPDATE transactions SET status = $3, void_reason = COALESCE($4, void_reason), updated_at = $5${paidClause}
+             WHERE business_id = $1 AND receipt_number = $2`,
+            zeroPaid
+              ? [businessId, receiptNumber, status, voidReason, now, 0]
+              : [businessId, receiptNumber, status, voidReason, now]
+          );
+        }
+
+        if (updateResult.rowCount > 0) {
+          console.log(`[Replicate Transaction] Updated ${updateResult.rowCount} row(s) to status=${status} local_id=${localId}`);
+        } else {
+          console.warn(`[Replicate Transaction] Update missed: business=${obfuscateKey(businessId)} local_id=${localId} receipt=${receiptNumber || 'n/a'}`);
+        }
+        return;
+      }
+
       const txResult = await q.query(
-        `INSERT INTO transactions (business_id, local_id, receipt_number, customer_id, customer_name, cashier_name, status, payment_method, subtotal, discount_amount, discount_type, tax_vat, tax_nhil, tax_getfund, tax_covid, total_tax, grand_total, amount_tendered, change_given, momo_reference, void_reason, notes, paid_amount, created_at, updated_at)
-         VALUES ($1::varchar, $2::integer, $3::varchar, $4::integer, $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::float, $10::float, $11::varchar, $12::float, $13::float, $14::float, $15::float, $16::float, $17::float, $18::float, $19::float, $20::varchar, $21::text, $22::text, $23::float, $24::timestamp, $25::timestamp)
+        `INSERT INTO transactions (business_id, local_id, receipt_number, customer_id, customer_name, cashier_name, status, payment_method, subtotal, discount_amount, discount_type, tax_vat, tax_nhil, tax_getfund, tax_covid, total_tax, grand_total, amount_tendered, change_given, momo_reference, void_reason, notes, paid_amount, split_cash, split_momo, created_at, updated_at)
+         VALUES ($1::varchar, $2::integer, $3::varchar, $4::integer, $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::float, $10::float, $11::varchar, $12::float, $13::float, $14::float, $15::float, $16::float, $17::float, $18::float, $19::float, $20::varchar, $21::text, $22::text, $23::float, $24::float, $25::float, $26::timestamp, $27::timestamp)
          ON CONFLICT (business_id, receipt_number) DO UPDATE SET
            local_id = EXCLUDED.local_id,
            customer_id = EXCLUDED.customer_id,
@@ -272,6 +449,8 @@ async function replicatePayloadToReplicaTables(businessId, entity, operation, pa
            void_reason = EXCLUDED.void_reason,
            notes = EXCLUDED.notes,
            paid_amount = EXCLUDED.paid_amount,
+           split_cash = EXCLUDED.split_cash,
+           split_momo = EXCLUDED.split_momo,
            updated_at = EXCLUDED.updated_at
          RETURNING id`,
         [
@@ -298,6 +477,8 @@ async function replicatePayloadToReplicaTables(businessId, entity, operation, pa
           payload.void_reason || null,
           payload.notes || null,
           parseFloat(payload.paid_amount ?? 0),
+          parseFloat(payload.split_cash ?? 0),
+          parseFloat(payload.split_momo ?? 0),
           payload.created_at ? new Date(payload.created_at) : now,
           payload.updated_at ? new Date(payload.updated_at) : now
         ]
@@ -449,9 +630,14 @@ console.log('[DB Config]', {
   connectionStringParams: poolConfig?.connectionString?.split('?')[1] || 'none'
 });
 
+const maxPoolSize = process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : 10;
+
+/** Payment breakdown SQL (matches POS: split allocates cash + MoMo portions). */
+const SQL_TX_CASH_TOTAL = `COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN grand_total WHEN payment_method = 'split' THEN GREATEST(0, COALESCE(split_cash, 0) - COALESCE(change_given, 0)) ELSE 0 END), 0)::double precision`;
+const SQL_TX_MOMO_TOTAL = `COALESCE(SUM(CASE WHEN payment_method = 'momo' THEN grand_total WHEN payment_method = 'split' THEN COALESCE(split_momo, 0) ELSE 0 END), 0)::double precision`;
 const pool = new Pool({
   ...poolConfig,
-  max: 50,
+  max: maxPoolSize,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 30000
 });
@@ -459,6 +645,25 @@ const pool = new Pool({
 pool.on('error', (err) => {
   console.error('[Postgres Pool Error]:', err);
 });
+
+// Pool health: log only when stressed or when POOL_MONITOR=1 (avoid noisy production logs)
+const poolMonitorVerbose = process.env.POOL_MONITOR === '1' || process.env.POOL_MONITOR === 'true';
+setInterval(() => {
+  const stats = {
+    total: pool.totalCount,
+    idle: pool.idleCount,
+    waiting: pool.waitingCount,
+    maxLimit: maxPoolSize,
+  };
+  const underPressure =
+    stats.waiting > 0 ||
+    stats.total >= Math.max(1, Math.floor(maxPoolSize * 0.85));
+  if (poolMonitorVerbose) {
+    console.log('[Pool Monitor]', stats);
+  } else if (underPressure) {
+    console.warn('[Pool Monitor] Connection pool under pressure:', stats);
+  }
+}, 60000);
 
 // Initialize DB Tables with Retry
 async function initDb() {
@@ -538,6 +743,7 @@ async function initDb() {
           name VARCHAR(255) NOT NULL,
           pin VARCHAR(255) NOT NULL,
           role VARCHAR(50) NOT NULL DEFAULT 'cashier',
+          cashier_nav_visibility TEXT,
           created_at TIMESTAMP,
           updated_at TIMESTAMP,
           UNIQUE(business_id, local_id)
@@ -618,6 +824,22 @@ async function initDb() {
           name VARCHAR(255) NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS business_owners (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS owner_stores (
+          id SERIAL PRIMARY KEY,
+          owner_id INTEGER NOT NULL REFERENCES business_owners(id) ON DELETE CASCADE,
+          license_id INTEGER NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(owner_id, license_id)
+        );
       `);
 
       // Migration: Add columns to super_admins in case it was created with an old schema
@@ -655,6 +877,7 @@ async function initDb() {
         await pool.query('ALTER TABLE licenses ADD COLUMN IF NOT EXISTS business_logo TEXT;');
         await pool.query('ALTER TABLE licenses ADD COLUMN IF NOT EXISTS business_address TEXT;');
         await pool.query('ALTER TABLE licenses ADD COLUMN IF NOT EXISTS business_phone VARCHAR(50);');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS cashier_nav_visibility TEXT;');
 
         // Migration: Add credit_limit to customers table
         await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS credit_limit REAL NOT NULL DEFAULT 0;');
@@ -662,6 +885,8 @@ async function initDb() {
 
         // Migration: Add paid_amount to transactions
         await pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paid_amount REAL NOT NULL DEFAULT 0;');
+        await pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS split_cash REAL NOT NULL DEFAULT 0;');
+        await pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS split_momo REAL NOT NULL DEFAULT 0;');
         await pool.query("UPDATE transactions SET paid_amount = grand_total WHERE payment_method != 'credit' OR status = 'completed';");
 
         await pool.query(`
@@ -675,12 +900,38 @@ async function initDb() {
             note TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
+
+          CREATE TABLE IF NOT EXISTS attendance (
+            id SERIAL PRIMARY KEY,
+            business_id VARCHAR(100) NOT NULL,
+            local_id INTEGER,
+            user_id INTEGER,
+            type VARCHAR(20) NOT NULL,
+            created_at TIMESTAMP,
+            UNIQUE(business_id, local_id)
+          );
+
+          CREATE TABLE IF NOT EXISTS app_releases (
+            id SERIAL PRIMARY KEY,
+            version VARCHAR(50) NOT NULL,
+            installer_filename VARCHAR(255) NOT NULL,
+            installer_path TEXT NOT NULL,
+            installer_size BIGINT,
+            yml_path TEXT,
+            is_current BOOLEAN DEFAULT false,
+            uploaded_by VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
         `);
+        try {
+          await pool.query('CREATE INDEX IF NOT EXISTS idx_app_releases_created ON app_releases(created_at DESC);');
+        } catch (e) { /* ignore */ }
 
         // Ensure unique constraints exist (Postgres doesn't add them automatically with CREATE TABLE IF NOT EXISTS if table exists)
         try { await pool.query('ALTER TABLE credit_payments ADD CONSTRAINT uniq_cp_biz_local UNIQUE(business_id, local_id);'); } catch (e) {}
         try { await pool.query('ALTER TABLE transactions ADD CONSTRAINT uniq_tx_biz_receipt UNIQUE(business_id, receipt_number);'); } catch (e) {}
         try { await pool.query('ALTER TABLE customers ADD CONSTRAINT uniq_cust_biz_local UNIQUE(business_id, local_id);'); } catch (e) {}
+        try { await pool.query('ALTER TABLE attendance ADD CONSTRAINT uniq_attendance_biz_local UNIQUE(business_id, local_id);'); } catch (e) {}
 
         // Automatic Duplicate Purge on Startup
         console.log('[DB Migration] Purging duplicate transactions and payments...');
@@ -782,7 +1033,49 @@ async function initDb() {
         CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_transaction 
           ON synced_data((payload->>'receipt_number'))
           WHERE entity = 'transaction';
+        
+        -- Business-scoped lookups for high performance at scale
+        CREATE INDEX IF NOT EXISTS idx_products_business ON products(business_id, is_active);
+        CREATE INDEX IF NOT EXISTS idx_transactions_business ON transactions(business_id);
+        CREATE INDEX IF NOT EXISTS idx_transactions_business_date ON transactions(business_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_transactions_business_status ON transactions(business_id, status);
+        CREATE INDEX IF NOT EXISTS idx_customers_business ON customers(business_id);
+        CREATE INDEX IF NOT EXISTS idx_users_business ON users(business_id);
+        CREATE INDEX IF NOT EXISTS idx_credit_payments_business ON credit_payments(business_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_transaction_items_txid ON transaction_items(transaction_id);
+        CREATE INDEX IF NOT EXISTS idx_transaction_items_business ON transaction_items(business_id);
+        CREATE INDEX IF NOT EXISTS idx_attendance_business ON attendance(business_id);
+        CREATE INDEX IF NOT EXISTS idx_attendance_business_date ON attendance(business_id, created_at DESC);
       `);
+
+      // Cloud Restock Orders table (portal → desktop sync)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS cloud_restock_orders (
+          id SERIAL PRIMARY KEY,
+          business_id VARCHAR(100) NOT NULL,
+          invoice_number VARCHAR(100),
+          supplier_name VARCHAR(255),
+          notes TEXT,
+          is_paid BOOLEAN DEFAULT FALSE,
+          created_by VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'pending',
+          items JSONB NOT NULL DEFAULT '[]',
+          new_products JSONB DEFAULT '[]',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          applied_at TIMESTAMP,
+          CONSTRAINT unique_business_invoice UNIQUE (business_id, invoice_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cloud_restock_business ON cloud_restock_orders(business_id, status);
+      `);
+
+      // Migration: Alter existing cloud_restock_orders table to add the unique constraint if not present
+      try {
+        await pool.query(`
+          ALTER TABLE cloud_restock_orders ADD CONSTRAINT unique_business_invoice UNIQUE (business_id, invoice_number);
+        `);
+      } catch (err) {
+        // Ignore if constraint already exists
+      }
 
       // 5. Migration: Mark any license with a synced business_name as active
       try {
@@ -792,6 +1085,28 @@ async function initDb() {
           WHERE business_name IS NOT NULL AND business_name != '' AND status != 'active'
         `);
       } catch (err) { /* ignore */ }
+
+      // Backfill voided/reversed status from sync history (fixes portal showing reversed as completed)
+      try {
+        const backfill = await pool.query(`
+          UPDATE transactions t
+          SET
+            status = LOWER(sd.payload->>'status'),
+            void_reason = COALESCE(sd.payload->>'reason', sd.payload->>'void_reason', t.void_reason),
+            paid_amount = 0,
+            updated_at = GREATEST(t.updated_at, sd.received_at)
+          FROM synced_data sd
+          WHERE sd.entity = 'transaction'
+            AND sd.operation = 'update'
+            AND sd.business_id = t.business_id
+            AND t.local_id = (sd.payload->>'id')::integer
+            AND LOWER(sd.payload->>'status') IN ('voided', 'reversed')
+            AND LOWER(COALESCE(t.status, 'completed')) NOT IN ('voided', 'reversed')
+        `);
+        if (backfill.rowCount > 0) {
+          console.log(`[Migration] Backfilled ${backfill.rowCount} reversed/voided transaction(s) from sync history`);
+        }
+      } catch (err) { /* ignore if synced_data schema differs */ }
 
       console.log('✅ Database tables initialized');
       global.DB_OFFLINE = false;
@@ -933,17 +1248,30 @@ app.post('/v1/sync/push', requireSyncAuth, syncRateLimit, async (req, res) => {
   }
 });
 
-// Pull Endpoint (For Data Recovery)
+// Pull Endpoint (For Data Recovery, supporting pagination)
 app.get('/v1/sync/pull', requireSyncAuth, async (req, res) => {
   const business_id = req.business_id;
 
   if (!business_id) return res.status(400).json({ success: false, message: 'business_id is required' });
 
+  const page = req.query.page ? Math.max(1, parseInt(req.query.page) || 1) : null;
+  const limit = req.query.limit ? Math.min(5000, Math.max(1, parseInt(req.query.limit) || 500)) : null;
+
   try {
-    const result = await pool.query(
-      'SELECT entity, payload FROM synced_data WHERE business_id = $1 ORDER BY received_at ASC',
-      [business_id]
-    );
+    let result;
+    if (page && limit) {
+      const offset = (page - 1) * limit;
+      result = await pool.query(
+        'SELECT entity, payload FROM synced_data WHERE business_id = $1 ORDER BY received_at ASC LIMIT $2 OFFSET $3',
+        [business_id, limit, offset]
+      );
+    } else {
+      // Backward compatibility: fetch all up to a large safety cap (e.g. 100,000 items)
+      result = await pool.query(
+        'SELECT entity, payload FROM synced_data WHERE business_id = $1 ORDER BY received_at ASC LIMIT 100000',
+        [business_id]
+      );
+    }
 
     // Group items by entity to make it easier for the client to process
     const recoveryData = result.rows.reduce((acc, row) => {
@@ -952,32 +1280,38 @@ app.get('/v1/sync/pull', requireSyncAuth, async (req, res) => {
       return acc;
     }, {});
 
+    const hasMore = page && limit ? result.rows.length === limit : false;
+
     console.log('[Recovery] Serving ' + result.rows.length + ' items for business: ' + obfuscateKey(business_id));
-    res.json({ success: true, data: recoveryData });
+    res.json({ success: true, data: recoveryData, hasMore });
   } catch (err) {
     console.error('[Recovery Error]:', err.message);
     res.status(500).json({ success: false, message: 'Recovery failed on server' });
   }
 });
 
-// Sync-Down: Get latest customer balances
+// Sync-Down: Get latest customer balances (supporting incremental sync)
 app.get('/v1/sync/customers', requireSyncAuth, async (req, res) => {
   const business_id = req.business_id;
+  const since = req.query.since || '';
+
   try {
-    const result = await pool.query(
-      'SELECT id, local_id, credit_balance, credit_limit, loyalty_points, total_spent, updated_at FROM customers WHERE business_id = $1',
-      [business_id]
-    );
+    let customerQuery = 'SELECT id, local_id, credit_balance, credit_limit, loyalty_points, total_spent, updated_at FROM customers WHERE business_id = $1';
+    let paymentsQuery = `SELECT id, local_id, customer_id, amount, payment_method, note, created_at
+                         FROM credit_payments
+                         WHERE business_id = $1 AND created_at >= NOW() - INTERVAL '30 days'`;
+    const params = [business_id];
 
-    // Also fetch recent payments (last 30 days) to sync down
-    const paymentsResult = await pool.query(
-      `SELECT id, local_id, customer_id, amount, payment_method, note, created_at
-       FROM credit_payments
-       WHERE business_id = $1 AND created_at >= NOW() - INTERVAL '30 days'`,
-      [business_id]
-    );
+    if (since) {
+      params.push(new Date(since));
+      customerQuery += ' AND (updated_at >= $2 OR created_at >= $2)';
+      paymentsQuery += ' AND created_at >= $2';
+    }
 
-    console.log(`[Sync API] Returning ${result.rows.length} customers, ${paymentsResult.rows.length} payments for business ${obfuscateKey(business_id)}`);
+    const result = await pool.query(customerQuery, params);
+    const paymentsResult = await pool.query(paymentsQuery, params);
+
+    console.log(`[Sync API] Returning ${result.rows.length} customers, ${paymentsResult.rows.length} payments for business ${obfuscateKey(business_id)} since ${since || 'beginning'}`);
 
     res.json({
       success: true,
@@ -987,7 +1321,31 @@ app.get('/v1/sync/customers', requireSyncAuth, async (req, res) => {
       }
     });
   } catch (err) {
+    console.error('[Sync Customers Error]:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch customer balances' });
+  }
+});
+
+// Sync Users: Pull all users (with hashed pins and cashier visibility) to the local POS
+app.get('/v1/sync/users', requireSyncAuth, async (req, res) => {
+  const businessId = req.business_id;
+  try {
+    const result = await pool.query(
+      `SELECT id, local_id, name, pin, role, cashier_nav_visibility, created_at, updated_at 
+       FROM users 
+       WHERE business_id = $1`,
+      [businessId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        users: result.rows
+      }
+    });
+  } catch (err) {
+    console.error('[Sync Users Error]:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch user updates' });
   }
 });
 
@@ -1122,6 +1480,57 @@ app.post('/v1/inventory/clear', requireSyncAuth, async (req, res) => {
 
 // --- PORTAL APIs ---
 
+function hashOwnerPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+function licenseToStoreDto(license) {
+  return {
+    businessId: license.license_key,
+    businessName: license.business_name || 'Unnamed Store',
+    businessAddress: license.business_address || null,
+    businessPhone: license.business_phone || null,
+    businessLogo: license.business_logo || null,
+    status: license.status || 'inactive',
+  };
+}
+
+async function fetchOwnerStores(ownerId) {
+  const result = await pool.query(
+    `SELECT l.* FROM licenses l
+     INNER JOIN owner_stores os ON os.license_id = l.id
+     WHERE os.owner_id = $1
+     ORDER BY COALESCE(l.business_name, l.license_key) ASC`,
+    [ownerId]
+  );
+  return result.rows.map(licenseToStoreDto);
+}
+
+async function verifyStoreAdminPin(businessId, password) {
+  const userResult = await pool.query(
+    "SELECT payload FROM synced_data WHERE business_id = $1 AND entity = 'users' ORDER BY received_at DESC LIMIT 1",
+    [businessId]
+  );
+  if (userResult.rows.length === 0) return null;
+  let users = parsePayload(userResult.rows[0]) || [];
+  if (!Array.isArray(users)) users = [];
+  const adminUser = users.find((u) => u.role === 'admin');
+  if (!adminUser) return null;
+  const inputHashedPin = crypto.createHash('sha256').update(password + PIN_SALT).digest('hex');
+  if (inputHashedPin !== adminUser.pin) return null;
+  return adminUser;
+}
+
+function businessTokenForLicense(license, userName, ownerId) {
+  return signToken({
+    role: 'business',
+    businessId: license.license_key,
+    businessName: license.business_name,
+    userName: userName || 'Owner',
+    ownerId: ownerId || undefined,
+  });
+}
+
 // Portal Login
 app.post('/api/portal/login', rateLimit, async (req, res) => {
   const { storeName, password } = req.body;
@@ -1254,6 +1663,229 @@ app.post('/api/portal/login', rateLimit, async (req, res) => {
   }
 });
 
+// --- Multi-store owner accounts ---
+
+app.post('/api/portal/owners/register', rateLimit, async (req, res) => {
+  const { email, password, name } = req.body || {};
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+  if (global.DB_OFFLINE) {
+    return res.json({ success: true, owner: { id: 1, email: normalizedEmail, name: name || 'Owner' } });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO business_owners (email, password_hash, name)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, name`,
+      [normalizedEmail, hashOwnerPassword(password), name?.trim() || normalizedEmail.split('@')[0]]
+    );
+    return res.json({ success: true, owner: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+    console.error('[Owner Register]', err);
+    return res.status(500).json({ error: 'Could not create owner account' });
+  }
+});
+
+app.post('/api/portal/owners/login', rateLimit, async (req, res) => {
+  const { email, password } = req.body || {};
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  if (global.DB_OFFLINE) {
+    const token = signToken({ role: 'owner', ownerId: 1, email: normalizedEmail, name: 'Demo Owner' });
+    return res.json({
+      success: true,
+      role: 'owner',
+      token,
+      ownerName: 'Demo Owner',
+      stores: [
+        { businessId: 'mock-123', businessName: 'Demo Store A', status: 'active' },
+        { businessId: 'mock-456', businessName: 'Demo Store B', status: 'active' },
+      ],
+    });
+  }
+  try {
+    const ownerResult = await pool.query(
+      'SELECT * FROM business_owners WHERE LOWER(email) = LOWER($1) AND password_hash = $2',
+      [normalizedEmail, hashOwnerPassword(password)]
+    );
+    if (ownerResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    const owner = ownerResult.rows[0];
+    const stores = await fetchOwnerStores(owner.id);
+    const token = signToken({
+      role: 'owner',
+      ownerId: owner.id,
+      email: owner.email,
+      name: owner.name,
+    });
+    return res.json({
+      success: true,
+      role: 'owner',
+      token,
+      ownerName: owner.name,
+      stores,
+    });
+  } catch (err) {
+    console.error('[Owner Login]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/portal/owners/stores', requireAuth, async (req, res) => {
+  const ownerId = req.auth.role === 'owner' ? req.auth.ownerId : req.auth.ownerId;
+  if (!ownerId) return res.status(403).json({ error: 'Owner access required' });
+  if (global.DB_OFFLINE) {
+    return res.json({
+      stores: [
+        { businessId: 'mock-123', businessName: 'Demo Store A', status: 'active' },
+        { businessId: 'mock-456', businessName: 'Demo Store B', status: 'active' },
+      ],
+    });
+  }
+  try {
+    const stores = await fetchOwnerStores(ownerId);
+    return res.json({ stores });
+  } catch (err) {
+    console.error('[Owner Stores]', err);
+    return res.status(500).json({ error: 'Could not load stores' });
+  }
+});
+
+app.post('/api/portal/owners/link-store', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'owner') {
+    return res.status(403).json({ error: 'Owner access required' });
+  }
+  const { licenseKey, adminPin } = req.body || {};
+  if (!licenseKey || !adminPin) {
+    return res.status(400).json({ error: 'License key and store admin PIN are required' });
+  }
+  if (global.DB_OFFLINE) {
+    return res.json({
+      success: true,
+      stores: [
+        { businessId: 'mock-123', businessName: 'Demo Store A', status: 'active' },
+        { businessId: String(licenseKey), businessName: 'Linked Store', status: 'active' },
+      ],
+    });
+  }
+  try {
+    const licenseResult = await pool.query(
+      'SELECT * FROM licenses WHERE UPPER(TRIM(license_key)) = UPPER(TRIM($1))',
+      [licenseKey]
+    );
+    if (licenseResult.rows.length === 0) {
+      return res.status(404).json({ error: 'License key not found' });
+    }
+    const license = licenseResult.rows[0];
+    const adminUser = await verifyStoreAdminPin(license.license_key, adminPin);
+    if (!adminUser) {
+      return res.status(401).json({ error: 'Invalid admin PIN for this store' });
+    }
+    await pool.query(
+      `INSERT INTO owner_stores (owner_id, license_id) VALUES ($1, $2)
+       ON CONFLICT (owner_id, license_id) DO NOTHING`,
+      [req.auth.ownerId, license.id]
+    );
+    const stores = await fetchOwnerStores(req.auth.ownerId);
+    return res.json({ success: true, stores });
+  } catch (err) {
+    console.error('[Owner Link Store]', err);
+    return res.status(500).json({ error: 'Could not link store' });
+  }
+});
+
+app.post('/api/portal/owners/switch-store', requireAuth, async (req, res) => {
+  const ownerId = req.auth.ownerId;
+  if (!ownerId) {
+    return res.status(403).json({ error: 'Multi-store owner session required' });
+  }
+  const { businessId } = req.body || {};
+  if (!businessId) {
+    return res.status(400).json({ error: 'businessId is required' });
+  }
+  if (global.DB_OFFLINE) {
+    const token = signToken({
+      role: 'business',
+      businessId,
+      businessName: 'Demo Store',
+      userName: req.auth.name || 'Owner',
+      ownerId,
+    });
+    return res.json({
+      success: true,
+      role: 'business',
+      token,
+      businessId,
+      businessName: 'Demo Store',
+      userName: req.auth.name || 'Owner',
+    });
+  }
+  try {
+    const access = await pool.query(
+      `SELECT l.* FROM licenses l
+       INNER JOIN owner_stores os ON os.license_id = l.id AND os.owner_id = $1
+       WHERE l.license_key = $2`,
+      [ownerId, businessId]
+    );
+    if (access.rows.length === 0) {
+      return res.status(403).json({ error: 'This store is not linked to your account' });
+    }
+    const license = access.rows[0];
+    const token = businessTokenForLicense(license, req.auth.name || req.auth.userName, ownerId);
+    return res.json({
+      success: true,
+      role: 'business',
+      token,
+      businessId: license.license_key,
+      businessName: license.business_name,
+      businessAddress: license.business_address || null,
+      businessPhone: license.business_phone || null,
+      businessLogo: license.business_logo || null,
+      userName: req.auth.name || 'Owner',
+    });
+  } catch (err) {
+    console.error('[Owner Switch Store]', err);
+    return res.status(500).json({ error: 'Could not switch store' });
+  }
+});
+
+app.post('/api/portal/admin/owners/link-license', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { ownerEmail, licenseId } = req.body || {};
+  if (!ownerEmail || !licenseId) {
+    return res.status(400).json({ error: 'ownerEmail and licenseId are required' });
+  }
+  try {
+    const ownerResult = await pool.query(
+      'SELECT id FROM business_owners WHERE LOWER(email) = LOWER($1)',
+      [ownerEmail.trim()]
+    );
+    if (ownerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Owner account not found' });
+    }
+    await pool.query(
+      `INSERT INTO owner_stores (owner_id, license_id) VALUES ($1, $2)
+       ON CONFLICT (owner_id, license_id) DO NOTHING`,
+      [ownerResult.rows[0].id, licenseId]
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[Admin Link Owner Store]', err);
+    return res.status(500).json({ error: 'Could not link store to owner' });
+  }
+});
+
 // Admin: Get Licenses
 app.get('/api/portal/admin/licenses', requireAuth, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
@@ -1362,110 +1994,83 @@ app.get('/api/portal/dashboard/summary', requireAuth, async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      "SELECT * FROM transactions WHERE business_id = $1 ORDER BY created_at ASC",
-      [businessId]
-    );
-
-    console.log('[Dashboard] Total transactions in DB:', result.rows.length);
-    console.log('[Dashboard] Date filter from:', fromDate, 'to:', toDate);
-
-    let totalSales = 0;
-    let totalCredit = 0;
-    const recentTx = [];
-    const salesByDate = {};
-    let totalTransactions = 0;
-
-    // Revenue Calculation Logic:
-    // Total Revenue = SUM(paid_amount) for all transactions created in the period.
-    // This attributes payments back to the original borrowing date as requested.
-    result.rows.forEach(tx => {
-      if (!tx || !tx.receipt_number) return;
-
-      const status = (tx.status || '').trim().toLowerCase();
-      if (status !== 'completed' && status !== 'debt') return;
-
-      const txDateStr = tx.created_at || tx.updated_at;
-      if (!txDateStr) return;
-
-      const txDate = new Date(txDateStr);
-      if (isNaN(txDate.getTime())) return;
-
-      if (txDate < fromDate || txDate > toDate) return;
-
-      const grandTotal = parseFloat(tx.grand_total || 0);
-      const paidAmount = parseFloat(tx.paid_amount || 0);
-      
-      // Total Sales for the period is the realized revenue (paid_amount)
-      totalSales += paidAmount;
-      
-      const date = txDate.toISOString().split('T')[0];
-      salesByDate[date] = (salesByDate[date] || 0) + paidAmount;
-
-      // Track credit issued in this period (unpaid portion)
-      if (tx.payment_method === 'credit') {
-        totalCredit += (grandTotal - paidAmount);
-      }
-      
-      totalTransactions++;
-
-      recentTx.push({
-        id: tx.id,
-        receipt_number: tx.receipt_number,
-        grand_total: grandTotal,
-        paid_amount: paidAmount,
-        created_at: txDate.toISOString(),
-        cashier_name: tx.cashier_name || 'Admin',
-        payment_method: tx.payment_method,
-        status: tx.status
-      });
-    });
-
-    // 2. Fetch Global Customer Debt
-
-    // Calculate total outstanding customer debt (sum of all customer credit balances)
-    let totalOutstandingDebt = 0;
-    try {
-      const debtResult = await pool.query(
-        "SELECT COALESCE(SUM(credit_balance), 0) as total FROM customers WHERE business_id = $1",
+    // 1-5. Fetch all summary metrics and recent transactions in parallel
+    const [productCountResult, debtResult, txSummaryResult, recentTxResult, chartDataResult] = await Promise.all([
+      pool.query(
+        "SELECT COUNT(*)::integer as total, COUNT(*) FILTER (WHERE stock_qty <= low_stock_threshold AND low_stock_threshold > 0)::integer as low_stock FROM products WHERE business_id = $1 AND is_active = TRUE",
         [businessId]
-      );
-      totalOutstandingDebt = parseFloat(debtResult.rows[0]?.total || 0);
-    } catch (err) {
-      console.error('[Dashboard] Error fetching total debt:', err.message);
-    }
+      ),
+      pool.query(
+        "SELECT COALESCE(SUM(credit_balance), 0)::double precision as total FROM customers WHERE business_id = $1",
+        [businessId]
+      ),
+      pool.query(
+        `SELECT 
+           COUNT(*)::integer as total_transactions,
+           COALESCE(SUM(paid_amount), 0)::double precision as total_sales
+         FROM transactions 
+         WHERE business_id = $1 
+           AND status IN ('completed', 'debt') 
+           AND created_at >= $2 
+           AND created_at <= $3`,
+        [businessId, fromDate, toDate]
+      ),
+      pool.query(
+        `SELECT id, receipt_number, grand_total, paid_amount, created_at, cashier_name, payment_method,
+                split_cash, split_momo, change_given, status
+         FROM transactions
+         WHERE business_id = $1
+           AND status IN ('completed', 'debt')
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [businessId]
+      ),
+      pool.query(
+        `SELECT 
+           TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+           SUM(paid_amount)::double precision as sales
+         FROM transactions
+         WHERE business_id = $1
+           AND status IN ('completed', 'debt')
+           AND created_at >= $2
+           AND created_at <= $3
+         GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
+         ORDER BY date ASC`,
+        [businessId, fromDate, toDate]
+      )
+    ]);
 
-    console.log(`[Dashboard API DEBUG] Final Total Revenue: ${totalSales}, Transactions: ${totalTransactions}, OutstandingDebt: ${totalOutstandingDebt}`);
+    const totalProducts = productCountResult.rows[0]?.total || 0;
+    const lowStockCount = productCountResult.rows[0]?.low_stock || 0;
+    const totalOutstandingDebt = parseFloat(debtResult.rows[0]?.total || 0);
+    const totalTransactions = txSummaryResult.rows[0]?.total_transactions || 0;
+    const totalSales = txSummaryResult.rows[0]?.total_sales || 0;
 
-    recentTx.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-    const chartData = Object.entries(salesByDate)
-      .map(([date, sales]) => ({ date, sales }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-7);
+    const recentTx = recentTxResult.rows.map(tx => ({
+      id: tx.id,
+      receipt_number: tx.receipt_number,
+      grand_total: parseFloat(tx.grand_total || 0),
+      paid_amount: parseFloat(tx.paid_amount || 0),
+      created_at: tx.created_at ? new Date(tx.created_at).toISOString() : new Date().toISOString(),
+      cashier_name: tx.cashier_name || 'Admin',
+      payment_method: tx.payment_method,
+      split_cash: parseFloat(tx.split_cash || 0),
+      split_momo: parseFloat(tx.split_momo || 0),
+      change_given: parseFloat(tx.change_given || 0),
+      status: tx.status
+    }));
+    let chartData = chartDataResult.rows.map(row => ({
+      date: row.date,
+      sales: parseFloat(row.sales || 0)
+    }));
 
     if (chartData.length === 0) {
       chartData.push({ date: new Date().toISOString().split('T')[0], sales: totalSales });
+    } else {
+      chartData = chartData.slice(-7);
     }
 
-    let totalProducts = 0;
-    let lowStockCount = 0;
-    try {
-      const productResult = await pool.query(
-        "SELECT * FROM products WHERE business_id = $1 AND is_active = TRUE",
-        [businessId]
-      );
-      productResult.rows.forEach(product => {
-        totalProducts++;
-        const stock = parseInt(product.stock_qty || 0);
-        const threshold = parseInt(product.low_stock_threshold || 0);
-        if (stock <= threshold && threshold > 0) {
-          lowStockCount++;
-        }
-      });
-    } catch (err) {
-      console.error('Product count error:', err.message || err);
-    }
+    console.log(`[Dashboard API] Final Total Sales: ${totalSales}, Transactions: ${totalTransactions}, OutstandingDebt: ${totalOutstandingDebt}`);
 
     res.json({
       totalSales,
@@ -1473,7 +2078,7 @@ app.get('/api/portal/dashboard/summary', requireAuth, async (req, res) => {
       transactionCount: totalTransactions,
       totalProducts,
       lowStockCount,
-      recentTx: recentTx.slice(0, 100),
+      recentTx,
       chartData
     });
   } catch (err) {
@@ -1528,6 +2133,160 @@ app.get('/api/portal/inventory', requireAuth, async (req, res) => {
   }
 });
 
+// ─── PORTAL RESTOCK ───────────────────────────────────────────────
+
+// Product search for restock modal (lightweight, returns id + name + stock)
+app.get('/api/portal/inventory/search', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json({ products: [] });
+  try {
+    const result = await pool.query(
+      `SELECT local_id, name, barcode, category, unit_price, cost_price, stock_qty, is_pharmacy,
+              expiry_date, batch_number
+       FROM products
+       WHERE business_id = $1 AND is_active = TRUE
+         AND (LOWER(name) LIKE $2 OR LOWER(barcode) LIKE $2)
+       ORDER BY name ASC LIMIT 20`,
+      [businessId, `%${q.toLowerCase()}%`]
+    );
+    res.json({ products: result.rows });
+  } catch (err) {
+    console.error('[Portal Restock Search]', err);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// Get categories for the new-product dropdown
+app.get('/api/portal/inventory/categories', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT category FROM products WHERE business_id = $1 AND is_active = TRUE ORDER BY category`,
+      [businessId]
+    );
+    res.json({ categories: result.rows.map(r => r.category) });
+  } catch (err) {
+    console.error('[Portal Categories]', err);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// Create a restock order from the portal
+app.post('/api/portal/restock', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  const { supplier_name, notes, is_paid, items, new_products } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'At least one item is required.' });
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const invoiceNumber = `PRT-${dateStr}-${rand}`;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO cloud_restock_orders (business_id, invoice_number, supplier_name, notes, is_paid, created_by, items, new_products)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, invoice_number, status, created_at`,
+      [
+        businessId,
+        invoiceNumber,
+        supplier_name || null,
+        notes || null,
+        is_paid || false,
+        req.auth.userName || req.auth.name || 'Portal User',
+        JSON.stringify(items),
+        JSON.stringify(new_products || [])
+      ]
+    );
+
+    console.log(`[Portal Restock] Created order ${invoiceNumber} for business ${businessId} with ${items.length} items`);
+    res.json({ success: true, order: result.rows[0] });
+  } catch (err) {
+    console.error('[Portal Restock Create]', err);
+    res.status(500).json({ error: 'Failed to create restock order.' });
+  }
+});
+
+// List restock orders for portal display
+app.get('/api/portal/restock', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  try {
+    const result = await pool.query(
+      `SELECT id, invoice_number, supplier_name, notes, is_paid, created_by, status, items, new_products, created_at, applied_at
+       FROM cloud_restock_orders
+       WHERE business_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [businessId]
+    );
+
+    const orders = result.rows.map(o => ({
+      ...o,
+      items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items,
+      new_products: typeof o.new_products === 'string' ? JSON.parse(o.new_products) : o.new_products,
+      total_items: (typeof o.items === 'string' ? JSON.parse(o.items) : o.items || []).reduce((s, i) => s + (i.quantity || 0), 0),
+      total_cost: (typeof o.items === 'string' ? JSON.parse(o.items) : o.items || []).reduce((s, i) => s + (i.quantity || 0) * (i.cost_price || 0), 0),
+    }));
+
+    res.json({ orders });
+  } catch (err) {
+    console.error('[Portal Restock List]', err);
+    res.status(500).json({ error: 'Failed to list restock orders.' });
+  }
+});
+
+// Desktop pulls pending restock orders
+app.get('/v1/sync/pull-restocks', requireSyncAuth, async (req, res) => {
+  const businessId = req.business_id;
+  try {
+    const result = await pool.query(
+      `SELECT id, invoice_number, supplier_name, notes, is_paid, created_by, items, new_products, created_at
+       FROM cloud_restock_orders
+       WHERE business_id = $1 AND status = 'pending'
+       ORDER BY created_at ASC`,
+      [businessId]
+    );
+
+    const orders = result.rows.map(o => ({
+      ...o,
+      items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items,
+      new_products: typeof o.new_products === 'string' ? JSON.parse(o.new_products) : o.new_products,
+    }));
+
+    res.json({ success: true, orders });
+  } catch (err) {
+    console.error('[Sync Pull Restocks]', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch pending restocks.' });
+  }
+});
+
+// Desktop acknowledges applied restock orders
+app.post('/v1/sync/ack-restock', requireSyncAuth, async (req, res) => {
+  const businessId = req.business_id;
+  const { order_ids } = req.body;
+
+  if (!order_ids || !Array.isArray(order_ids) || order_ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'order_ids required' });
+  }
+
+  try {
+    await pool.query(
+      `UPDATE cloud_restock_orders SET status = 'applied', applied_at = CURRENT_TIMESTAMP
+       WHERE business_id = $1 AND id = ANY($2::int[])`,
+      [businessId, order_ids]
+    );
+    console.log(`[Sync] ACK restock orders ${order_ids.join(',')} for business ${businessId}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Sync ACK Restock]', err);
+    res.status(500).json({ success: false, error: 'Failed to acknowledge.' });
+  }
+});
+
 // Business: Sales History (paginated, date range)
 app.get('/api/portal/sales', requireAuth, async (req, res) => {
   const businessId = req.auth.businessId;
@@ -1536,6 +2295,7 @@ app.get('/api/portal/sales', requireAuth, async (req, res) => {
   const from = req.query.from || '';
   const to = req.query.to || '';
   const includeItems = req.query.includeItems === 'true';
+  const paymentMethod = (req.query.payment || '').trim().toLowerCase();
 
   if (global.DB_OFFLINE) {
     return res.json({
@@ -1549,56 +2309,76 @@ app.get('/api/portal/sales', requireAuth, async (req, res) => {
   }
 
   try {
-    // Build SQL query with date filtering at the database level
     const params = [businessId];
     let dateFilter = '';
     
     if (from) {
-      params.push(from);
-      dateFilter += ` AND DATE(created_at) >= $${params.length}`;
+      const fromDate = parseDateOnly(from);
+      fromDate.setHours(0, 0, 0, 0);
+      params.push(fromDate);
+      dateFilter += ` AND created_at >= $${params.length}`;
     }
     if (to) {
-      params.push(to);
-      dateFilter += ` AND DATE(created_at) <= $${params.length}`;
+      const toDate = parseDateOnly(to);
+      toDate.setHours(23, 59, 59, 999);
+      params.push(toDate);
+      dateFilter += ` AND created_at <= $${params.length}`;
+    }
+    let paymentFilter = '';
+    if (paymentMethod) {
+      params.push(paymentMethod);
+      paymentFilter = ` AND payment_method = $${params.length}`;
     }
 
-    console.log(`[Sales API] business=${obfuscateKey(businessId)} range=${from || 'all'}..${to || 'all'}`);
-    const result = await pool.query(
-      `SELECT *, (SELECT COUNT(*) FROM transaction_items WHERE transaction_id = transactions.id) as item_count 
-       FROM transactions 
-       WHERE business_id = $1 AND status NOT IN ('voided', 'reversed') ${dateFilter} 
-       ORDER BY created_at DESC`,
-      params
-    );
-
-    const transactions = result.rows;
-
-    const total = transactions.length;
-    const offset = (page - 1) * limit;
-    const paginatedTransactions = transactions.slice(offset, offset + limit);
-
-    const paymentsRes = await pool.query(
-      `SELECT * FROM credit_payments WHERE business_id = $1 ${dateFilter.replace(/created_at/g, 'created_at')}`,
-      params
-    );
-    const debtPaymentsTotal = paymentsRes.rows.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+    console.log(`[Sales API] business=${obfuscateKey(businessId)} range=${from || 'all'}..${to || 'all'} payment=${paymentMethod || 'all'}`);
     
+    // 1. Fetch count and payment totals in one query
+    const summaryRes = await pool.query(
+      `SELECT
+         COUNT(*)::integer as total_count,
+         ${SQL_TX_CASH_TOTAL} as cash_total,
+         ${SQL_TX_MOMO_TOTAL} as momo_total,
+         COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0)::double precision as card_total,
+         COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total ELSE 0 END), 0)::double precision as credit_total
+       FROM transactions
+       WHERE business_id = $1 AND status NOT IN ('voided', 'reversed') ${dateFilter}${paymentFilter}`,
+      params
+    );
 
-    let cashTotal = 0, momoTotal = 0, cardTotal = 0, creditTotal = 0;
-    transactions.forEach(tx => {
-      const t = parseFloat(tx.grand_total || 0);
-      const method = (tx.payment_method || 'cash').trim().toLowerCase();
-      
-      if (method === 'cash') cashTotal += t;
-      else if (method === 'momo') momoTotal += t;
-      else if (method === 'card') cardTotal += t;
-      else if (method === 'credit') creditTotal += t;
-    });
+    const total = summaryRes.rows[0]?.total_count || 0;
+    const cashTotal = summaryRes.rows[0]?.cash_total || 0;
+    const momoTotal = summaryRes.rows[0]?.momo_total || 0;
+    const cardTotal = summaryRes.rows[0]?.card_total || 0;
+    const creditTotal = summaryRes.rows[0]?.credit_total || 0;
+
+    // 2. Fetch debt payments in period
+    const paymentsRes = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0)::double precision as total_paid 
+       FROM credit_payments 
+       WHERE business_id = $1 ${dateFilter}`,
+      params
+    );
+    const debtPaymentsTotal = paymentsRes.rows[0]?.total_paid || 0;
+
+    // 3. Fetch paginated transactions
+    const offset = (page - 1) * limit;
+    const dataParams = [...params, limit, offset];
+    
+    const dataRes = await pool.query(
+      `SELECT *, 
+         (SELECT COUNT(*)::integer FROM transaction_items WHERE transaction_id = transactions.id) as item_count 
+       FROM transactions 
+       WHERE business_id = $1 AND status NOT IN ('voided', 'reversed') ${dateFilter}${paymentFilter} 
+       ORDER BY created_at DESC
+       LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+      dataParams
+    );
+
+    const paginatedTransactions = dataRes.rows;
 
     // REVENUE CALCULATION: Realized Money = (Non-Credit Sales) + (Debt Payments Received)
     const realizedSales = cashTotal + momoTotal + cardTotal;
     const totalRevenue = realizedSales + debtPaymentsTotal;
-
 
     // Credit Summary: Issued in period - Paid in period
     const netCreditTotal = Math.max(0, creditTotal - debtPaymentsTotal);
@@ -1631,6 +2411,9 @@ app.get('/api/portal/sales', requireAuth, async (req, res) => {
         customer_name: tx.customer_name || null,
         grand_total: parseFloat(tx.grand_total || 0),
         payment_method: tx.payment_method || 'cash',
+        split_cash: parseFloat(tx.split_cash || 0),
+        split_momo: parseFloat(tx.split_momo || 0),
+        change_given: parseFloat(tx.change_given || 0),
         status: tx.status || 'completed',
         item_count: parseInt(tx.item_count || 0),
         ...(tx.items ? { items: tx.items } : {})
@@ -1668,45 +2451,38 @@ app.get('/api/portal/inventory/overview', requireAuth, async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      "SELECT * FROM products WHERE business_id = $1 AND is_active = TRUE",
+    // 1. Fetch totals
+    const totalsRes = await pool.query(
+      `SELECT 
+         COUNT(*)::integer as total_items,
+         COALESCE(SUM(stock_qty), 0)::integer as total_stock,
+         COALESCE(SUM(stock_qty * unit_price), 0)::double precision as total_value_selling,
+         COALESCE(SUM(stock_qty * cost_price), 0)::double precision as total_value_cost
+       FROM products
+       WHERE business_id = $1 AND is_active = TRUE`,
       [businessId]
     );
-    const products = result.rows.map(p => ({
-      ...p,
-      id: p.local_id || p.id,
-      barcode: p.barcode,
-      name: p.name,
-      category: p.category,
-      stock_qty: p.stock_qty,
-      low_stock_threshold: p.low_stock_threshold
-    }));
-    let totalStock = 0, totalValueSelling = 0, totalValueCost = 0;
-    const catMap = new Map();
 
-    products.forEach(p => {
-      const stock = parseInt(p.stock_qty || p.stock || 0);
-      const sellPrice = parseFloat(p.unit_price || p.price || 0);
-      const costPrice = parseFloat(p.cost_price || 0);
-      const cat = p.category || 'General';
-
-      totalStock += stock;
-      totalValueSelling += stock * sellPrice;
-      totalValueCost += stock * costPrice;
-
-      if (!catMap.has(cat)) catMap.set(cat, { category: cat, item_count: 0, total_stock: 0, total_value: 0 });
-      const c = catMap.get(cat);
-      c.item_count++;
-      c.total_stock += stock;
-      c.total_value += stock * sellPrice;
-    });
+    // 2. Fetch category breakdown
+    const categoriesRes = await pool.query(
+      `SELECT 
+         COALESCE(category, 'General') as category,
+         COUNT(*)::integer as item_count,
+         COALESCE(SUM(stock_qty), 0)::integer as total_stock,
+         COALESCE(SUM(stock_qty * unit_price), 0)::double precision as total_value
+       FROM products
+       WHERE business_id = $1 AND is_active = TRUE
+       GROUP BY COALESCE(category, 'General')
+       ORDER BY total_value DESC`,
+      [businessId]
+    );
 
     res.json({
-      totals: { total_items: products.length, total_stock: totalStock, total_value_selling: totalValueSelling, total_value_cost: totalValueCost },
-      categories: Array.from(catMap.values()).sort((a, b) => b.total_value - a.total_value)
+      totals: totalsRes.rows[0] || { total_items: 0, total_stock: 0, total_value_selling: 0, total_value_cost: 0 },
+      categories: categoriesRes.rows
     });
   } catch (err) {
-    console.error(err);
+    console.error('[Inventory Overview Error]:', err.message);
     res.status(500).json({ error: 'Failed to fetch inventory overview' });
   }
 });
@@ -1746,11 +2522,223 @@ app.get('/api/portal/sales/:id', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/portal/reports/attendance', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  const days = parseInt(req.query.days) || 30;
+  const fromDate = req.query.from ? parseDateOnly(req.query.from) : new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const toDate = req.query.to ? parseDateOnly(req.query.to) : new Date();
+
+  // Set time limits for strict date matching
+  fromDate.setHours(0, 0, 0, 0);
+  toDate.setHours(23, 59, 59, 999);
+
+  if (global.DB_OFFLINE) {
+    return res.json([]);
+  }
+
+  try {
+    const query = `
+      SELECT 
+        a.id,
+        a.user_id,
+        u.name as user_name,
+        a.created_at as clock_in,
+        (
+          SELECT a2.created_at 
+          FROM attendance a2 
+          WHERE a2.business_id = a.business_id
+            AND a2.user_id = a.user_id 
+            AND a2.type = 'out' 
+            AND a2.created_at > a.created_at 
+          ORDER BY a2.created_at ASC 
+          LIMIT 1
+        ) as clock_out
+      FROM attendance a
+      JOIN users u ON a.business_id = u.business_id AND a.user_id = u.local_id
+      WHERE a.business_id = $1 
+        AND a.type = 'in'
+        AND a.created_at >= $2
+        AND a.created_at <= $3
+      ORDER BY a.created_at DESC
+    `;
+    const result = await pool.query(query, [businessId, fromDate, toDate]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[Portal Attendance Report]', err);
+    res.status(500).json({ error: 'Failed to fetch attendance logs' });
+  }
+});
+
+app.get('/api/portal/reports/attendance/:id/sales', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  const attendanceId = req.params.id;
+  const includeItems = req.query.includeItems === 'true';
+  const cashierNameHint = typeof req.query.cashierName === 'string' ? req.query.cashierName.trim() : '';
+
+  if (global.DB_OFFLINE) {
+    return res.json({ shift: null, transactions: [], summary: null, itemSummary: [] });
+  }
+
+  try {
+    const attResult = await pool.query(
+      `SELECT 
+         a.id,
+         a.user_id,
+         COALESCE(u.name, $3) as user_name,
+         a.created_at as clock_in,
+         (
+           SELECT a2.created_at 
+           FROM attendance a2 
+           WHERE a2.business_id = a.business_id
+             AND a2.user_id = a.user_id 
+             AND a2.type = 'out' 
+             AND a2.created_at > a.created_at 
+           ORDER BY a2.created_at ASC 
+           LIMIT 1
+         ) as clock_out
+       FROM attendance a
+       LEFT JOIN users u ON a.business_id = u.business_id AND a.user_id = u.local_id
+       WHERE a.business_id = $1
+         AND a.type = 'in'
+         AND (a.id::text = $2::text OR a.local_id::text = $2::text)`,
+      [businessId, String(attendanceId), cashierNameHint || null]
+    );
+
+    if (attResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Attendance log not found' });
+    }
+
+    const shift = attResult.rows[0];
+    const cashierName = (cashierNameHint || shift.user_name || '').trim();
+    if (!cashierName) {
+      return res.status(400).json({ error: 'Could not resolve cashier name for this shift' });
+    }
+
+    const clockIn = new Date(shift.clock_in);
+    const clockOut = shift.clock_out ? new Date(shift.clock_out) : new Date();
+
+    // Case-insensitive cashier match (names can differ slightly after sync)
+    const shiftWhere = `
+      t.business_id = $1
+      AND TRIM(LOWER(t.cashier_name)) = TRIM(LOWER($2))
+      AND t.created_at >= $3
+      AND t.created_at <= $4
+      AND t.status IN ('completed', 'debt')
+    `;
+    const shiftParams = [businessId, cashierName, clockIn, clockOut];
+
+    const txResult = await pool.query(
+      `SELECT 
+         t.id,
+         t.receipt_number,
+         t.created_at,
+         t.grand_total,
+         t.payment_method,
+         t.split_cash,
+         t.split_momo,
+         t.change_given,
+         t.status,
+         (SELECT COUNT(*)::integer FROM transaction_items WHERE transaction_id = t.id) as item_count
+       FROM transactions t
+       WHERE ${shiftWhere}
+       ORDER BY t.created_at DESC`,
+      shiftParams
+    );
+
+    let transactions = txResult.rows;
+
+    if (includeItems && transactions.length > 0) {
+      const txIds = transactions.map((t) => t.id);
+      const itemsResult = await pool.query(
+        `SELECT * FROM transaction_items
+         WHERE transaction_id = ANY($1::int[])
+         ORDER BY transaction_id, id`,
+        [txIds]
+      );
+      const itemsByTx = new Map();
+      for (const item of itemsResult.rows) {
+        const list = itemsByTx.get(item.transaction_id) || [];
+        list.push(item);
+        itemsByTx.set(item.transaction_id, list);
+      }
+      transactions = transactions.map((t) => ({
+        ...t,
+        items: itemsByTx.get(t.id) || [],
+      }));
+    }
+
+    const summaryResult = await pool.query(
+      `SELECT 
+         COUNT(*)::integer as transaction_count,
+         COALESCE(SUM(paid_amount), 0)::double precision as total_revenue,
+         ${SQL_TX_CASH_TOTAL} as cash_total,
+         ${SQL_TX_MOMO_TOTAL} as momo_total,
+         COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0)::double precision as card_total,
+         COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total ELSE 0 END), 0)::double precision as credit_total
+       FROM transactions t
+       WHERE ${shiftWhere}`,
+      shiftParams
+    );
+
+    const itemSummaryResult = await pool.query(
+      `SELECT 
+         ti.product_name,
+         SUM(ti.quantity)::double precision as total_qty
+       FROM transaction_items ti
+       INNER JOIN transactions t ON t.id = ti.transaction_id
+       WHERE ${shiftWhere}
+       GROUP BY ti.product_name
+       ORDER BY total_qty DESC`,
+      shiftParams
+    );
+
+    const paymentsResult = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0)::double precision as total
+       FROM credit_payments
+       WHERE business_id = $1
+         AND created_at >= $2
+         AND created_at <= $3`,
+      [businessId, clockIn, clockOut]
+    );
+
+    const summaryRow = summaryResult.rows[0] || {};
+    const summary = {
+      transaction_count: summaryRow.transaction_count || 0,
+      total_revenue: parseFloat(summaryRow.total_revenue || 0),
+      cash_total: parseFloat(summaryRow.cash_total || 0),
+      momo_total: parseFloat(summaryRow.momo_total || 0),
+      card_total: parseFloat(summaryRow.card_total || 0),
+      credit_total: parseFloat(summaryRow.credit_total || 0),
+      debt_recovered: parseFloat(paymentsResult.rows[0]?.total || 0),
+    };
+
+    res.json({
+      shift: {
+        id: shift.id,
+        user_name: cashierName,
+        clock_in: shift.clock_in,
+        clock_out: shift.clock_out,
+      },
+      transactions,
+      summary,
+      itemSummary: itemSummaryResult.rows.map((r) => ({
+        product_name: r.product_name,
+        total_qty: parseFloat(r.total_qty || 0),
+      })),
+    });
+  } catch (err) {
+    console.error('[Portal Attendance Sales]', err);
+    res.status(500).json({ error: 'Failed to fetch sales for shift' });
+  }
+});
+
 app.get('/api/portal/reports', requireAuth, async (req, res) => {
   const businessId = req.auth.businessId;
   const days = parseInt(req.query.days) || 30;
   const fromDate = req.query.from ? parseDateOnly(req.query.from) : new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const toDate = req.query.to ? parseDateOnly(req.query.to) : new Date();
+  fromDate.setHours(0, 0, 0, 0);
+  toDate.setHours(23, 59, 59, 999);
 
   if (global.DB_OFFLINE) {
     return res.json({
@@ -1764,171 +2752,199 @@ app.get('/api/portal/reports', requireAuth, async (req, res) => {
   }
 
   try {
-    // Get all transactions (filter by created_at in memory)
-    const txResult = await pool.query(
-      `SELECT * FROM transactions WHERE business_id = $1`,
-      [businessId]
-    );
-    const itemResult = await pool.query(
-      `SELECT * FROM transaction_items WHERE business_id = $1`,
-      [businessId]
-    );
-    const paymentResult = await pool.query(
-      `SELECT * FROM credit_payments WHERE business_id = $1`,
-      [businessId]
-    );
-    const customerBalanceResult = await pool.query(
-      `SELECT COALESCE(SUM(credit_balance), 0) as total FROM customers WHERE business_id = $1`,
-      [businessId]
-    );
+    const params = [businessId, fromDate, toDate];
 
-    const transactions = txResult.rows.filter(Boolean);
-    const totalOutstandingDebt = parseFloat(customerBalanceResult.rows[0].total || 0);
-    console.log(`[Reports API] business=${businessId} rawTx=${txResult.rows.length} rawPayments=${paymentResult.rows.length}`);
+    // 1-8. Fetch all report query results in parallel to eliminate sequential database latency
+    const [
+      txSummaryResult,
+      paymentsSummaryResult,
+      uniqueProductsResult,
+      salesByDayResult,
+      topProductsResult,
+      salesByCategoryResult,
+      hourlySalesResult,
+      splitSalesResult
+    ] = await Promise.all([
+      // 1. Transaction summary (sales and customer counts)
+      pool.query(
+        `SELECT
+           COUNT(*)::integer as transaction_count,
+           COUNT(DISTINCT customer_id)::integer as unique_customers,
+           ${SQL_TX_CASH_TOTAL} as cash_total,
+           ${SQL_TX_MOMO_TOTAL} as momo_total,
+           COALESCE(SUM(CASE WHEN payment_method = 'card' THEN grand_total ELSE 0 END), 0)::double precision as card_total,
+           COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN grand_total ELSE 0 END), 0)::double precision as credit_total
+         FROM transactions
+         WHERE business_id = $1 
+           AND status NOT IN ('voided', 'reversed')
+           AND created_at >= $2 
+           AND created_at <= $3`,
+        params
+      ),
+      // 2. Outstanding debt payments received
+      pool.query(
+        `SELECT COALESCE(SUM(amount), 0)::double precision as total_paid
+         FROM credit_payments
+         WHERE business_id = $1
+           AND created_at >= $2
+           AND created_at <= $3`,
+        params
+      ),
+      // 3. Unique products count
+      pool.query(
+        `SELECT COUNT(DISTINCT product_name)::integer as total_products
+         FROM transaction_items ti
+         JOIN transactions t ON t.id = ti.transaction_id
+         WHERE t.business_id = $1
+           AND t.status NOT IN ('voided', 'reversed')
+           AND t.created_at >= $2
+           AND t.created_at <= $3`,
+        params
+      ),
+      // 4. Sales by Day (realized sales + debt payments)
+      pool.query(
+        `SELECT date, SUM(revenue)::double precision as revenue, SUM(transactions)::integer as transactions
+         FROM (
+           SELECT 
+             TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+             SUM(CASE WHEN payment_method != 'credit' THEN grand_total ELSE 0 END) as revenue,
+             COUNT(*) as transactions
+           FROM transactions
+           WHERE business_id = $1
+             AND status NOT IN ('voided', 'reversed')
+             AND created_at >= $2
+             AND created_at <= $3
+           GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
+           
+           UNION ALL
+           
+           SELECT 
+             TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+             SUM(amount) as revenue,
+             0 as transactions
+           FROM credit_payments
+           WHERE business_id = $1
+             AND created_at >= $2
+             AND created_at <= $3
+           GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
+         ) combined
+         GROUP BY date
+         ORDER BY date ASC`,
+        params
+      ),
+      // 5. Top Products
+      pool.query(
+        `SELECT 
+           product_name as name,
+           SUM(quantity)::integer as quantity,
+           SUM(line_total)::double precision as revenue
+         FROM transaction_items ti
+         JOIN transactions t ON t.id = ti.transaction_id
+         WHERE t.business_id = $1
+           AND t.status NOT IN ('voided', 'reversed')
+           AND t.created_at >= $2
+           AND t.created_at <= $3
+         GROUP BY product_name
+         ORDER BY revenue DESC`,
+        params
+      ),
+      // 6. Sales by Category
+      pool.query(
+        `SELECT 
+           COALESCE(category, 'General') as category,
+           SUM(line_total)::double precision as revenue
+         FROM transaction_items ti
+         JOIN transactions t ON t.id = ti.transaction_id
+         WHERE t.business_id = $1
+           AND t.status NOT IN ('voided', 'reversed')
+           AND t.created_at >= $2
+           AND t.created_at <= $3
+         GROUP BY COALESCE(category, 'General')
+         ORDER BY revenue DESC`,
+        params
+      ),
+      // 7. Hourly Sales
+      pool.query(
+        `SELECT 
+           EXTRACT(HOUR FROM created_at)::integer as hour,
+           SUM(grand_total)::double precision as revenue
+         FROM transactions
+         WHERE business_id = $1
+           AND status NOT IN ('voided', 'reversed')
+           AND created_at >= $2
+           AND created_at <= $3
+         GROUP BY EXTRACT(HOUR FROM created_at)
+         ORDER BY hour ASC`,
+        params
+      ),
+      // 8. Split Sales
+      pool.query(
+        `SELECT COALESCE(SUM(grand_total), 0)::double precision as amount, COUNT(*)::integer as count
+         FROM transactions
+         WHERE business_id = $1 AND payment_method = 'split' AND status NOT IN ('voided', 'reversed')
+           AND created_at >= $2 AND created_at <= $3`,
+        params
+      )
+    ]);
 
-    const filteredPayments = paymentResult.rows.filter(p => {
-      const createdAt = p.created_at;
-      if (!createdAt) return false;
-      const dateObj = new Date(createdAt);
-      
-      // Use localized start/end for the selected period
-      const start = new Date(fromDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(toDate);
-      end.setHours(23, 59, 59, 999);
-      
-      const match = dateObj >= start && dateObj <= end;
-      return match;
-    });
+    const txSummary = txSummaryResult.rows[0] || {};
+    const transactionCount = txSummary.transaction_count || 0;
+    const uniqueCustomers = txSummary.unique_customers || 0;
+    const cashTotal = txSummary.cash_total || 0;
+    const momoTotal = txSummary.momo_total || 0;
+    const cardTotal = txSummary.card_total || 0;
+    const creditTotal = txSummary.credit_total || 0;
 
-    console.log(`[Reports API] filteredPayments=${filteredPayments.length}`);
-    const filteredTransactions = transactions.filter(t => {
-      const createdAt = t.created_at || t.updated_at;
-      if (!createdAt) return false;
-      const dateObj = new Date(createdAt);
-      if (isNaN(dateObj.getTime())) return false;
-      
-      // Full day range handling
-      const start = new Date(fromDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(toDate);
-      end.setHours(23, 59, 59, 999);
-      
-      return dateObj >= start && dateObj <= end;
-    });
+    const debtPaymentsTotal = paymentsSummaryResult.rows[0]?.total_paid || 0;
+    const totalProducts = uniqueProductsResult.rows[0]?.total_products || 0;
 
-    console.log(`[Reports API] filteredTransactions=${filteredTransactions.length}`);
-    filteredTransactions.forEach(t => {
-        console.log(`  - TX: ${t.receipt_number}, method: "${t.payment_method}", total: ${t.grand_total}, status: ${t.status}`);
-    });
-
-    const uniqueCustomers = new Set(filteredTransactions.filter(t => t.customer_id).map(t => t.customer_id)).size;
-    
-    // Realized Revenue = (Non-Credit Sales) + (Debt Payments Received)
-    const realizedSales = filteredTransactions
-      .filter(t => {
-          const method = (t.payment_method || 'cash').trim().toLowerCase();
-          return method !== 'credit';
-      })
-      .reduce((sum, t) => sum + (parseFloat(t.grand_total) || 0), 0);
-    const totalPaymentsReceived = filteredPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-    const totalRevenue = realizedSales + totalPaymentsReceived;
-
-    console.log(`[Reports API] realizedSales=${realizedSales} totalPayments=${totalPaymentsReceived} totalRevenue=${totalRevenue}`);
-
-    const salesByDayMap = new Map();
-    filteredTransactions.forEach(t => {
-      const createdAt = t.created_at || t.updated_at;
-      const dateObj = new Date(createdAt);
-      const date = dateObj.toISOString().split('T')[0];
-      if (!salesByDayMap.has(date)) salesByDayMap.set(date, { date, revenue: 0, transactions: 0 });
-      const day = salesByDayMap.get(date);
-      const method = (t.payment_method || 'cash').trim().toLowerCase();
-      day.revenue += (method === 'credit') ? 0 : parseFloat(t.grand_total) || 0;
-      day.transactions++;
-    });
-
-    // Add payments to salesByDayMap
-    filteredPayments.forEach(p => {
-      const date = new Date(p.created_at).toISOString().split('T')[0];
-      if (!salesByDayMap.has(date)) salesByDayMap.set(date, { date, revenue: 0, transactions: 0 });
-      const day = salesByDayMap.get(date);
-      day.revenue += parseFloat(p.amount) || 0;
-    });
-
-    const paymentMap = new Map();
-    filteredTransactions.forEach(t => {
-      const method = (t.payment_method || 'cash').toLowerCase();
-      if (!paymentMap.has(method)) paymentMap.set(method, { method: t.payment_method || 'cash', amount: 0, count: 0 });
-      const p = paymentMap.get(method);
-      p.amount += parseFloat(t.grand_total) || 0;
-      p.count++;
-    });
-
-    // Summary Card: Credit = (New Credit Issued in Period) - (Debt Payments Received in Period)
-    // This reflects the NET debt change for the selected timeframe.
-    const creditSalesInPeriod = filteredTransactions
-      .filter(t => (t.payment_method || 'cash').toLowerCase() === 'credit')
-      .reduce((sum, t) => sum + (parseFloat(t.grand_total) || 0), 0);
-    
-    const summary = {
-      total_revenue: totalRevenue,
-      transaction_count: filteredTransactions.length,
-      avg_basket: filteredTransactions.length > 0 ? totalRevenue / filteredTransactions.length : 0,
-      cash_total: (paymentMap.get('cash')?.amount || 0),
-      momo_total: (paymentMap.get('momo')?.amount || 0),
-      card_total: (paymentMap.get('card')?.amount || 0),
-      credit_total: Math.max(0, creditSalesInPeriod - totalPaymentsReceived)
-    };
-
-    const items = [];
-    filteredTransactions.forEach(t => {
-      const matchedItems = itemResult.rows.filter(item => item.transaction_id === t.id);
-      matchedItems.forEach(item => {
-        items.push({ ...item, received_at: t.created_at || t.updated_at });
-      });
-    });
-
-    const productMap = new Map();
-    items.forEach(i => {
-      const name = i.product_name || 'Unknown';
-      if (!productMap.has(name)) productMap.set(name, { name, quantity: 0, revenue: 0 });
-      const p = productMap.get(name);
-      p.quantity += parseInt(i.quantity || 0);
-      p.revenue += parseFloat(i.line_total) || 0;
-    });
-
-    const categoryMap = new Map();
-    items.forEach(i => {
-      const cat = i.category || 'General';
-      if (!categoryMap.has(cat)) categoryMap.set(cat, { category: cat, revenue: 0, percentage: 0 });
-      categoryMap.get(cat).revenue += parseFloat(i.line_total) || 0;
-    });
-
-    const totalCategoryRevenue = Array.from(categoryMap.values()).reduce((s, c) => s + c.revenue, 0);
-    categoryMap.forEach(c => c.percentage = Math.round((c.revenue / totalCategoryRevenue) * 100) || 0);
+    const totalCategoryRevenue = salesByCategoryResult.rows.reduce((s, c) => s + c.revenue, 0);
+    const salesByCategory = salesByCategoryResult.rows.map(c => ({
+      category: c.category,
+      revenue: c.revenue,
+      percentage: totalCategoryRevenue > 0 ? Math.round((c.revenue / totalCategoryRevenue) * 100) : 0
+    }));
 
     const hourlyMap = new Map();
     for (let i = 0; i < 24; i++) hourlyMap.set(i, { hour: i, revenue: 0 });
-    filteredTransactions.forEach(t => {
-      const createdAt = t.created_at || t.updated_at;
-      if (!createdAt) return;
-      const dateObj = new Date(createdAt);
-      if (isNaN(dateObj.getTime())) return;
-      const hour = dateObj.getHours();
-      hourlyMap.get(hour).revenue += parseFloat(t.grand_total) || 0;
+    hourlySalesResult.rows.forEach(r => {
+      if (hourlyMap.has(r.hour)) {
+        hourlyMap.get(r.hour).revenue = r.revenue;
+      }
     });
 
+    const realizedSales = cashTotal + momoTotal + cardTotal;
+    const totalRevenue = realizedSales + debtPaymentsTotal;
+
+    const summary = {
+      total_revenue: totalRevenue,
+      transaction_count: transactionCount,
+      avg_basket: transactionCount > 0 ? totalRevenue / transactionCount : 0,
+      cash_total: cashTotal,
+      momo_total: momoTotal,
+      card_total: cardTotal,
+      credit_total: Math.max(0, creditTotal - debtPaymentsTotal),
+      totalProducts,
+      uniqueCustomers
+    };
+
+    const splitAmount = parseFloat(splitSalesResult.rows[0]?.amount || 0);
+    const splitCount = splitSalesResult.rows[0]?.count || 0;
+
+    const paymentMap = [
+      { method: 'cash', amount: cashTotal, count: 0 },
+      { method: 'momo', amount: momoTotal, count: 0 },
+      { method: 'split', amount: splitAmount, count: splitCount },
+      { method: 'card', amount: cardTotal, count: 0 },
+      { method: 'credit', amount: creditTotal, count: 0 }
+    ].filter(p => p.amount > 0 || p.count > 0).sort((a, b) => b.amount - a.amount);
+
     res.json({
-      summary: {
-        ...summary,
-        totalProducts: productMap.size,
-        uniqueCustomers
-      },
-      salesByDay: Array.from(salesByDayMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
-      salesByPayment: Array.from(paymentMap.values()).sort((a, b) => b.amount - a.amount),
-      topProducts: Array.from(productMap.values()).sort((a, b) => b.revenue - a.revenue),
-      salesByCategory: Array.from(categoryMap.values()).sort((a, b) => b.revenue - a.revenue),
+      summary,
+      salesByDay: salesByDayResult.rows,
+      salesByPayment: paymentMap,
+      topProducts: topProductsResult.rows,
+      salesByCategory,
       hourlySales: Array.from(hourlyMap.values())
     });
   } catch (err) {
@@ -1939,16 +2955,58 @@ app.get('/api/portal/reports', requireAuth, async (req, res) => {
 
 // ── Customer & Credit API ──
 
-// List Customers
+// List Customers (paginated + server-side search)
 app.get('/api/portal/customers', requireAuth, async (req, res) => {
   const business_id = req.auth.businessId;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+  const search = (req.query.search || '').trim();
+
   try {
-    const result = await pool.query(
-      'SELECT * FROM customers WHERE business_id = $1 ORDER BY credit_balance DESC, name ASC',
+    const params = [business_id];
+    let searchQuery = '';
+    
+    if (search) {
+      params.push(`%${search}%`);
+      searchQuery = ` AND (name ILIKE $${params.length} OR phone ILIKE $${params.length})`;
+    }
+
+    // 1. Get total count
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::integer FROM customers WHERE business_id = $1${searchQuery}`,
+      params
+    );
+    const total = countRes.rows[0]?.count || 0;
+
+    // 2. Get paginated data
+    const offset = (page - 1) * limit;
+    const dataParams = [...params, limit, offset];
+    const dataRes = await pool.query(
+      `SELECT * FROM customers 
+       WHERE business_id = $1${searchQuery} 
+       ORDER BY credit_balance DESC, name ASC 
+       LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+      dataParams
+    );
+
+    const debtRes = await pool.query(
+      `SELECT COALESCE(SUM(credit_balance), 0)::double precision as total FROM customers WHERE business_id = $1`,
       [business_id]
     );
-    res.json(result.rows);
+    const totalDebt = debtRes.rows[0]?.total || 0;
+
+    res.json({
+      customers: dataRes.rows,
+      totalDebt,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (err) {
+    console.error('[Customers API Error]:', err.message);
     res.status(500).json({ error: 'Failed to fetch customers' });
   }
 });
@@ -2039,6 +3097,400 @@ app.delete('/api/portal/admin/super-admins/:id', requireAuth, async (req, res) =
   }
 });
 
+// Upload app updates - Chunked Installer (Super Admin only)
+app.post('/api/portal/admin/updates/upload-chunk', requireAuth, uploadUpdate.single('chunk'), async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const chunkIndex = parseInt(req.body.chunkIndex, 10);
+    const totalChunks = parseInt(req.body.totalChunks, 10);
+    const originalname = req.body.originalname;
+    
+    if (!req.file || isNaN(chunkIndex) || isNaN(totalChunks) || !originalname) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Missing chunk data' });
+    }
+
+    // Convert spaces to hyphens to match electron-builder's URL format in latest.yml
+    const safeName = originalname.replace(/\s+/g, '-');
+
+    const tempFilePath = path.join(updatesDir, `${safeName}.part`);
+    const chunkFilePath = req.file.path; // Saved by multer
+
+    // Append chunk to the temp file
+    if (chunkIndex === 0 && fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath); // clean up any incomplete uploads
+    }
+
+    const chunkData = fs.readFileSync(chunkFilePath);
+    fs.appendFileSync(tempFilePath, chunkData);
+    fs.unlinkSync(chunkFilePath); // delete the uploaded chunk piece
+
+    // If last chunk, rename it to the final installer name
+    if (chunkIndex === totalChunks - 1) {
+      const finalPath = path.join(updatesDir, safeName);
+      if (fs.existsSync(finalPath)) {
+        fs.unlinkSync(finalPath);
+      }
+      fs.renameSync(tempFilePath, finalPath);
+
+      const stat = fs.statSync(finalPath);
+      fs.writeFileSync(
+        lastInstallerMetaPath,
+        JSON.stringify({
+          safeName,
+          originalname,
+          size: stat.size,
+          uploadedAt: new Date().toISOString(),
+        })
+      );
+    }
+
+    res.json({ success: true, message: `Chunk ${chunkIndex + 1}/${totalChunks} uploaded` });
+  } catch (err) {
+    console.error('Chunk Upload Error:', err);
+    res.status(500).json({ error: 'Failed to process chunk' });
+  }
+});
+
+// Upload latest.yml (Super Admin only)
+app.post('/api/portal/admin/updates/upload-latest', requireAuth, uploadUpdate.single('latestYml'), async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    if (!req.file) return res.status(400).json({ error: 'latest.yml is required' });
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    if (ext !== '.yml' && ext !== '.yaml') {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'File must be a .yml or .yaml file' });
+    }
+    
+    const currentPath = req.file.path;
+    const newPath = path.join(updatesDir, 'latest.yml');
+    
+    if (currentPath !== newPath) {
+      if (fs.existsSync(newPath)) fs.unlinkSync(newPath);
+      fs.renameSync(currentPath, newPath);
+    }
+
+    const ymlContent = fs.readFileSync(newPath, 'utf8');
+    const parsed = parseLatestYml(ymlContent);
+    let lastMeta = null;
+    if (fs.existsSync(lastInstallerMetaPath)) {
+      try {
+        lastMeta = JSON.parse(fs.readFileSync(lastInstallerMetaPath, 'utf8'));
+      } catch {
+        lastMeta = null;
+      }
+    }
+
+    const resolved = resolveInstallerFile(updatesDir, parsed.path, lastMeta?.safeName);
+    if (!resolved) {
+      return res.status(400).json({
+        error: 'Installer .exe not found. Upload the installer before latest.yml, and ensure path in latest.yml matches the file name.',
+      });
+    }
+
+    const version = parsed.version || path.basename(resolved.filename, '.exe').replace(/^SikaPOS[- ]Setup[- ]?/i, '') || '0.0.0';
+    const built = buildLatestYmlFromInstaller({
+      version,
+      installerPath: resolved.full,
+      installerFilename: resolved.filename,
+    });
+
+    let ymlMismatchWarning = null;
+    if (parsed.sha512 && parsed.sha512 !== built.sha512) {
+      ymlMismatchWarning =
+        'The uploaded latest.yml sha512 did not match the installer on the server. Published feed was regenerated from the installer file.';
+      console.warn('[Updates]', ymlMismatchWarning, {
+        ymlSha512: parsed.sha512,
+        fileSha512: built.sha512,
+        file: resolved.filename,
+      });
+    }
+
+    fs.writeFileSync(newPath, built.content, 'utf8');
+
+    const publishName = built.safeName;
+    const publishInstallerPath = path.join(updatesDir, publishName);
+    if (path.resolve(resolved.full) !== path.resolve(publishInstallerPath)) {
+      fs.copyFileSync(resolved.full, publishInstallerPath);
+    }
+
+    const releaseDir = path.join(releasesArchiveDir, `${version}-${Date.now()}`);
+    fs.mkdirSync(releaseDir, { recursive: true });
+
+    const archivedInstaller = path.join(releaseDir, publishName);
+    const archivedYml = path.join(releaseDir, 'latest.yml');
+    fs.copyFileSync(publishInstallerPath, archivedInstaller);
+    fs.copyFileSync(newPath, archivedYml);
+
+    const blockmapCandidates = [
+      `${resolved.full}.blockmap`,
+      `${publishInstallerPath}.blockmap`,
+      path.join(updatesDir, `${publishName}.blockmap`),
+    ];
+    for (const blockmapSrc of blockmapCandidates) {
+      if (fs.existsSync(blockmapSrc)) {
+        fs.copyFileSync(blockmapSrc, path.join(releaseDir, `${publishName}.blockmap`));
+        fs.copyFileSync(blockmapSrc, path.join(updatesDir, `${publishName}.blockmap`));
+        break;
+      }
+    }
+
+    // Live update feed at /updates/ (electron-updater)
+    fs.copyFileSync(newPath, path.join(updatesDir, 'latest.yml'));
+
+    const stat = fs.statSync(archivedInstaller);
+    const release = await saveAppReleaseRecord({
+      version,
+      installerFilename: publishName,
+      installerPath: archivedInstaller,
+      installerSize: stat.size,
+      ymlPath: archivedYml,
+      uploadedBy: req.auth.name || req.auth.email || 'admin',
+    });
+
+    res.json({
+      success: true,
+      message: `Release v${version} saved and published.`,
+      warning: ymlMismatchWarning,
+      published: {
+        version,
+        installer: publishName,
+        sha512: built.sha512,
+        size: built.size,
+      },
+      release: {
+        id: release.id,
+        version: release.version,
+        installer_filename: release.installer_filename,
+        installer_size: release.installer_size,
+        is_current: release.is_current,
+        created_at: release.created_at,
+      },
+    });
+  } catch (err) {
+    console.error('Upload Error:', err);
+    res.status(500).json({ error: 'Failed to process latest.yml' });
+  }
+});
+
+// List saved app releases (Super Admin)
+app.get('/api/portal/admin/releases', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const result = await pool.query(
+      `SELECT id, version, installer_filename, installer_size, is_current, created_at, uploaded_by
+       FROM app_releases
+       ORDER BY created_at DESC`
+    );
+    res.json({ success: true, releases: result.rows });
+  } catch (err) {
+    console.error('[Releases List]', err);
+    res.status(500).json({ error: 'Failed to list releases' });
+  }
+});
+
+// Download a saved release installer (Super Admin)
+app.get('/api/portal/admin/releases/:id/download', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const result = await pool.query(
+      'SELECT installer_path, installer_filename FROM app_releases WHERE id = $1',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Release not found' });
+    const row = result.rows[0];
+    if (!row.installer_path || !fs.existsSync(row.installer_path)) {
+      return res.status(404).json({ error: 'Installer file missing on server. Re-upload this release.' });
+    }
+    res.download(row.installer_path, row.installer_filename);
+  } catch (err) {
+    console.error('[Release Download]', err);
+    res.status(500).json({ error: 'Failed to download release' });
+  }
+});
+
+// Download latest.yml for a saved release (Super Admin)
+app.get('/api/portal/admin/releases/:id/download-yml', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const result = await pool.query('SELECT yml_path, version FROM app_releases WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Release not found' });
+    const row = result.rows[0];
+    if (!row.yml_path || !fs.existsSync(row.yml_path)) {
+      return res.status(404).json({ error: 'latest.yml missing for this release' });
+    }
+    res.download(row.yml_path, `latest-${row.version || req.params.id}.yml`);
+  } catch (err) {
+    console.error('[Release YML Download]', err);
+    res.status(500).json({ error: 'Failed to download latest.yml' });
+  }
+});
+
+// --- User Management Portal APIs ---
+
+// 1. Get all staff users for the business
+app.get('/api/portal/users', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  if (!businessId) return res.status(400).json({ error: 'Business account required' });
+
+  if (global.DB_OFFLINE) {
+    return res.json({
+      success: true,
+      users: [
+        { id: 1, local_id: 1, name: 'Admin', role: 'admin', cashier_nav_visibility: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 2, local_id: 2, name: 'Cashier A', role: 'cashier', cashier_nav_visibility: JSON.stringify({ pos: true, customers: true, dashboard: true }), created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+      ]
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, local_id, name, role, cashier_nav_visibility, created_at, updated_at 
+       FROM users 
+       WHERE business_id = $1 
+       ORDER BY name ASC`,
+      [businessId]
+    );
+    res.json({ success: true, users: result.rows });
+  } catch (err) {
+    console.error('[Portal Users Get]', err);
+    res.status(500).json({ error: 'Failed to retrieve staff users' });
+  }
+});
+
+// 2. Create a staff user
+app.post('/api/portal/users', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  if (!businessId) return res.status(400).json({ error: 'Business account required' });
+
+  const { name, pin, role, cashier_nav_visibility } = req.body || {};
+  
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Staff name is required' });
+  if (!pin || pin.trim().length < 4) return res.status(400).json({ error: 'PIN/Password must be at least 4 characters' });
+  if (!['cashier', 'manager', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+
+  if (global.DB_OFFLINE) {
+    return res.json({ success: true, user: { id: Date.now(), local_id: Date.now(), name, role, cashier_nav_visibility } });
+  }
+
+  try {
+    // Generate new local_id scoped to the business
+    const maxResult = await pool.query(
+      'SELECT COALESCE(MAX(local_id), 0) + 1 AS next_id FROM users WHERE business_id = $1',
+      [businessId]
+    );
+    const localId = maxResult.rows[0].next_id;
+
+    // Hash the PIN
+    const hashedPin = crypto.createHash('sha256').update(pin.trim() + PIN_SALT).digest('hex');
+
+    const result = await pool.query(
+      `INSERT INTO users (business_id, local_id, name, pin, role, cashier_nav_visibility, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING id, local_id, name, role, cashier_nav_visibility, created_at, updated_at`,
+      [businessId, localId, name.trim(), hashedPin, role, cashier_nav_visibility || null]
+    );
+
+    res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    console.error('[Portal Users Create]', err);
+    res.status(500).json({ error: 'Failed to create staff user' });
+  }
+});
+
+// 3. Update a staff user
+app.put('/api/portal/users/:id', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  if (!businessId) return res.status(400).json({ error: 'Business account required' });
+
+  const userId = parseInt(req.params.id);
+  const { name, pin, role, cashier_nav_visibility } = req.body || {};
+
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Staff name is required' });
+  if (!['cashier', 'manager', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+
+  if (global.DB_OFFLINE) {
+    return res.json({ success: true, user: { id: userId, name, role, cashier_nav_visibility } });
+  }
+
+  try {
+    let result;
+    if (pin && pin.trim().length >= 4) {
+      // Hash the new PIN
+      const hashedPin = crypto.createHash('sha256').update(pin.trim() + PIN_SALT).digest('hex');
+      result = await pool.query(
+        `UPDATE users
+         SET name = $1, pin = $2, role = $3, cashier_nav_visibility = $4, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5 AND business_id = $6
+         RETURNING id, local_id, name, role, cashier_nav_visibility, created_at, updated_at`,
+        [name.trim(), hashedPin, role, cashier_nav_visibility || null, userId, businessId]
+      );
+    } else {
+      result = await pool.query(
+        `UPDATE users
+         SET name = $1, role = $2, cashier_nav_visibility = $3, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4 AND business_id = $5
+         RETURNING id, local_id, name, role, cashier_nav_visibility, created_at, updated_at`,
+        [name.trim(), role, cashier_nav_visibility || null, userId, businessId]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    console.error('[Portal Users Update]', err);
+    res.status(500).json({ error: 'Failed to update staff user' });
+  }
+});
+
+// 4. Delete a staff user
+app.delete('/api/portal/users/:id', requireAuth, async (req, res) => {
+  const businessId = req.auth.businessId;
+  if (!businessId) return res.status(400).json({ error: 'Business account required' });
+
+  const userId = parseInt(req.params.id);
+
+  if (global.DB_OFFLINE) {
+    return res.json({ success: true });
+  }
+
+  try {
+    // Check if the user is an admin, and if so, check if they are the last admin
+    const userCheck = await pool.query(
+      'SELECT role FROM users WHERE id = $1 AND business_id = $2',
+      [userId, businessId]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (userCheck.rows[0].role === 'admin') {
+      const adminCountResult = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM users WHERE business_id = $1 AND role = 'admin'",
+        [businessId]
+      );
+      if (adminCountResult.rows[0].count <= 1) {
+        return res.status(400).json({ error: 'Cannot delete the last admin user.' });
+      }
+    }
+
+    const result = await pool.query(
+      'DELETE FROM users WHERE id = $1 AND business_id = $2 RETURNING id',
+      [userId, businessId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Portal Users Delete]', err);
+    res.status(500).json({ error: 'Failed to delete staff user' });
+  }
+});
+
 // Serve Portal SPA Assets
 // Optional: host small update metadata only (installers go on GitHub Releases)
 app.use('/updates', express.static(path.join(__dirname, 'updates'), {
@@ -2073,9 +3525,10 @@ if (cluster.isPrimary) {
     }, 24 * 60 * 60 * 1000); 
 
     // 3. Fork workers
-    // Use up to 4 workers by default, or the number of CPUs if fewer
+    // Use configured worker count, or up to 4 workers by default (or number of CPUs if fewer)
     const numCPUs = os.cpus().length;
-    const workers = Math.min(numCPUs, 4);
+    const envWorkers = process.env.CLUSTER_WORKERS || process.env.WEB_CONCURRENCY;
+    const workers = envWorkers ? parseInt(envWorkers, 10) : Math.min(numCPUs, 4);
     
     console.log(`🚀 Forking ${workers} worker processes...`);
     for (let i = 0; i < workers; i++) {

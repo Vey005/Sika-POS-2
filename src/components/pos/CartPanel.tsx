@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCartStore } from '../../store/cart';
 import { useAuthStore } from '../../store/auth';
 import HeldSalesModal from './HeldSalesModal';
@@ -19,6 +19,10 @@ export default React.memo(function CartPanel({ onCharge }: Props) {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [editingQty, setEditingQty] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editingPrice, setEditingPrice] = useState<{ productId: number; saleUnit: string } | null>(null);
+  const [tempPrice, setTempPrice] = useState<string>('');
+  const itemsContainerRef = useRef<HTMLDivElement>(null);
+  const prevItemsCount = useRef(0);
   
   const { user } = useAuthStore();
   
@@ -28,6 +32,7 @@ export default React.memo(function CartPanel({ onCharge }: Props) {
     subtotal, taxBreakdown, grandTotal, itemCount,
     customerId, customerName, customerCreditBalance, clearCustomer,
     orderType, setOrderType, orderNote, setOrderNote,
+    editItemPrice,
   } = useCartStore();
 
   const handleKitchenPrint = async () => {
@@ -51,6 +56,17 @@ export default React.memo(function CartPanel({ onCharge }: Props) {
   useEffect(() => {
     updateHeldCount();
   }, []);
+
+  // Auto-scroll cart to bottom when a new item is added
+  useEffect(() => {
+    if (items.length > prevItemsCount.current && itemsContainerRef.current) {
+      itemsContainerRef.current.scrollTo({
+        top: itemsContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+    prevItemsCount.current = items.length;
+  }, [items.length]);
 
   const updateHeldCount = async () => {
     if (!window.sikapos) return;
@@ -80,6 +96,27 @@ export default React.memo(function CartPanel({ onCharge }: Props) {
   const total = grandTotal();
   const count = itemCount();
   const sub = subtotal();
+
+  function startEdit(item: any) {
+    const currentPrice = item.adjusted_price ?? (item.sale_unit === 'pack' ? item.pack_price : item.unit_price);
+    setTempPrice(String(currentPrice ?? 0));
+    setEditingPrice({ productId: item.product_id!, saleUnit: item.sale_unit || 'single' });
+  }
+
+  function commitEdit() {
+    if (!editingPrice) return;
+    const newPrice = parseFloat(tempPrice);
+    if (!isNaN(newPrice) && newPrice >= 0) {
+      editItemPrice(editingPrice.productId, editingPrice.saleUnit, newPrice);
+    }
+    setEditingPrice(null);
+    setTempPrice('');
+  }
+
+  function cancelEdit() {
+    setEditingPrice(null);
+    setTempPrice('');
+  }
 
   const effectiveDiscount = discountType === 'percentage'
     ? sub * (discountAmount / 100)
@@ -173,7 +210,7 @@ export default React.memo(function CartPanel({ onCharge }: Props) {
       )}
 
       {/* Items */}
-      <div className={styles.items}>
+      <div className={styles.items} ref={itemsContainerRef}>
         {items.length === 0 ? (
           <div className={styles.emptyCart}>
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -195,12 +232,56 @@ export default React.memo(function CartPanel({ onCharge }: Props) {
                 )}
                 {item.product_size && <p style={{ fontSize: '11px', color: 'var(--color-gold)', fontWeight: 600, marginTop: '-2px' }}>{item.product_size}</p>}
                 <p className={styles.itemPrice}>
-                  {useAuthStore.getState().receiptConfig.currency} {formatCurrency(item.unit_price)} × {item.quantity}
+                  {useAuthStore.getState().receiptConfig.currency}{' '}
+                  {editingPrice?.productId === item.product_id && editingPrice?.saleUnit === (item.sale_unit || 'single') ? (
+                    <input
+                      type="number"
+                      value={tempPrice}
+                      onChange={e => setTempPrice(e.target.value)}
+                      onBlur={commitEdit}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') commitEdit();
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      autoFocus
+                      style={{
+                        width: '80px',
+                        textAlign: 'right',
+                        border: '1px solid var(--color-primary)',
+                        borderRadius: '4px',
+                        padding: '2px 4px',
+                        fontSize: 'inherit',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text)'
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <span 
+                        onDoubleClick={() => startEdit(item)}
+                        title="Double-click to edit price"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {formatCurrency(item.adjusted_price ?? item.unit_price)}
+                      </span>
+                      {item.adjusted_price !== undefined && item.original_price !== undefined && item.adjusted_price !== item.original_price && (
+                        <span style={{
+                          color: item.adjusted_price < item.original_price ? '#22c55e' : '#f59e0b',
+                          fontSize: '10px',
+                          marginLeft: '4px'
+                        }}>
+                          {item.adjusted_price < item.original_price ? '-' : '+'}
+                          {useAuthStore.getState().receiptConfig.currency} {formatCurrency(Math.abs(item.adjusted_price - item.original_price))}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {' '}× {item.quantity}
                 </p>
               </div>
               <div className={styles.itemRight}>
                 <p className={styles.itemTotal}>
-                  {useAuthStore.getState().receiptConfig.currency} {formatCurrency(item.unit_price * item.quantity)}
+                  {useAuthStore.getState().receiptConfig.currency} {formatCurrency((item.adjusted_price ?? item.unit_price) * item.quantity)}
                 </p>
                 <div className={styles.qtyControls}>
                   <button

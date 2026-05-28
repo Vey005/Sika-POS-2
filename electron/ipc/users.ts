@@ -77,7 +77,7 @@ export function registerUserHandlers() {
 
         // Sync users to cloud
         const allUsers = db.prepare(
-          'SELECT id, name, pin, role, created_at, updated_at FROM users'
+          'SELECT id, name, pin, role, created_at, updated_at, cashier_nav_visibility FROM users'
         ).all();
         db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
           .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);
@@ -92,7 +92,7 @@ export function registerUserHandlers() {
 
         // Sync users to cloud
         const allUsers = db.prepare(
-          'SELECT id, name, pin, role, created_at, updated_at FROM users'
+          'SELECT id, name, pin, role, created_at, updated_at, cashier_nav_visibility FROM users'
         ).all();
         db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
           .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);
@@ -126,7 +126,7 @@ export function registerUserHandlers() {
 
       // Sync updated users list to cloud
       const allUsers = db.prepare(
-        'SELECT id, name, pin, role, created_at, updated_at FROM users'
+        'SELECT id, name, pin, role, created_at, updated_at, cashier_nav_visibility FROM users'
       ).all();
       db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
         .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);
@@ -268,7 +268,7 @@ export function registerUserHandlers() {
 
       // Sync users to cloud
       const allUsers = db.prepare(
-        'SELECT id, name, pin, role, created_at, updated_at FROM users'
+        'SELECT id, name, pin, role, created_at, updated_at, cashier_nav_visibility FROM users'
       ).all();
       db.prepare(`INSERT INTO sync_queue (entity, operation, payload, status, priority) VALUES (?, ?, ?, ?, ?)`)
         .run('users', 'push', JSON.stringify(allUsers), 'pending', 10);

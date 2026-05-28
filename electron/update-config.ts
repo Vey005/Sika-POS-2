@@ -6,8 +6,7 @@ export const GITHUB_OWNER = 'Vey005';
 export const GITHUB_REPO = 'Sika-POS-2';
 
 /** Set false to use Railway/generic URL below instead of GitHub */
-export const USE_GITHUB_RELEASES =
-  GITHUB_OWNER.length > 0 && GITHUB_REPO.length > 0;
+export const USE_GITHUB_RELEASES = false;
 
 export const UPDATE_FEED_URL =
   process.env.SIKAPOS_UPDATE_URL?.replace(/\/?$/, '/') ||

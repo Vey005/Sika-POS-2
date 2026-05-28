@@ -11,9 +11,10 @@ interface ReportData {
   businessName: string;
   businessLogo?: string;
   date: string;
-  isShiftReport?: boolean;
   cashierName?: string;
   shiftDuration?: string;
+  shiftTimeRange?: string;
+  reportFileDate?: string;
   summary: {
     transaction_count: number;
     total_revenue: number;
@@ -66,13 +67,16 @@ export default function ReportPreviewModal({ reports, onConfirm, onCancel, isPri
                 />
               )}
               <p className={styles.businessName}>{report.businessName}</p>
-              <p className={styles.reportTitle}>{report.isShiftReport ? 'SHIFT SUMMARY REPORT' : 'END OF DAY REPORT'}</p>
+              <p className={styles.reportTitle}>END OF DAY REPORT</p>
               <p className={styles.reportDate}>{report.date}</p>
-              
-              {report.isShiftReport && report.cashierName && (
+
+              {report.cashierName && (
                 <div className={styles.shiftMeta}>
                   <span>Staff: {report.cashierName}</span>
                   {report.shiftDuration && <span> · Duration: {report.shiftDuration}</span>}
+                  {report.shiftTimeRange && (
+                    <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.85 }}>{report.shiftTimeRange}</div>
+                  )}
                 </div>
               )}
 

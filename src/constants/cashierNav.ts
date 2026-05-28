@@ -2,6 +2,7 @@
 export const CASHIER_NAV_TAB_IDS = [
   'pos',
   'inventory',
+  'restock',
   'customers',
   'dashboard',
   'reports',
@@ -14,6 +15,7 @@ export type CashierNavTabId = (typeof CASHIER_NAV_TAB_IDS)[number];
 export const DEFAULT_CASHIER_NAV_VISIBILITY: Record<CashierNavTabId, boolean> = {
   pos: true,
   inventory: false,
+  restock: false,
   customers: true,
   dashboard: true,
   reports: false,

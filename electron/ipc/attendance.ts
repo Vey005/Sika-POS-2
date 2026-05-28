@@ -5,15 +5,35 @@ export function registerAttendanceHandlers() {
   const db = getDb();
 
   ipcMain.handle('attendance:clockIn', (_event, userId: number) => {
-    return db.prepare(`
+    const res = db.prepare(`
       INSERT INTO attendance (user_id, type) VALUES (?, 'in')
     `).run(userId);
+    
+    // Fetch the inserted record to sync
+    const record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(res.lastInsertRowid) as any;
+    if (record) {
+      db.prepare(`
+        INSERT INTO sync_queue (entity, operation, payload, status, priority)
+        VALUES ('attendance', 'push', ?, 'pending', 10)
+      `).run(JSON.stringify({ ...record, local_id: record.id }));
+    }
+    return res;
   });
 
   ipcMain.handle('attendance:clockOut', (_event, userId: number) => {
-    return db.prepare(`
+    const res = db.prepare(`
       INSERT INTO attendance (user_id, type) VALUES (?, 'out')
     `).run(userId);
+
+    // Fetch the inserted record to sync
+    const record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(res.lastInsertRowid) as any;
+    if (record) {
+      db.prepare(`
+        INSERT INTO sync_queue (entity, operation, payload, status, priority)
+        VALUES ('attendance', 'push', ?, 'pending', 10)
+      `).run(JSON.stringify({ ...record, local_id: record.id }));
+    }
+    return res;
   });
 
   ipcMain.handle('attendance:getStatus', (_event, userId: number) => {

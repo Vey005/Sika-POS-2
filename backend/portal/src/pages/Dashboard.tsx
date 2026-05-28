@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/auth';
 import StatCard from '../components/StatCard';
 import { getApiUrl, API_CONFIG } from '../config/api';
+import { paymentMethodLabel, paymentBadgeStyle } from '../utils/paymentDisplay';
 import {
   DollarSign,
   ShoppingCart,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   Receipt,
   Calendar,
+  ChevronDown,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -33,6 +35,9 @@ interface DashboardData {
       receipt_number: string;
       grand_total: number;
       payment_method: string;
+      split_cash?: number;
+      split_momo?: number;
+      change_given?: number;
       created_at: string;
       cashier_name: string;
       status: string;
@@ -47,6 +52,7 @@ export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'allTime' | 'custom'>('today');
   const [customDate, setCustomDate] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
+  const [periodOpen, setPeriodOpen] = useState(false);
 
   const fetchDashboard = async () => {
     setLoading(true);
@@ -191,87 +197,128 @@ export default function Dashboard() {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', marginBottom: '8px' }}>{businessName}</h1>
-        <p style={{ color: 'var(--text-muted)' }}>Real-time business overview</p>
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ fontSize: 'clamp(1.2rem,5vw,1.75rem)', marginBottom: '4px' }}>{businessName}</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Real-time business overview</p>
       </div>
 
       {/* Date Filter */}
-      <div className="glass-panel" style={{ padding: '16px', marginBottom: '32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <Calendar size={16} color="var(--text-muted)" />
-            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Date Range:</span>
-            {[
-              { id: 'today', label: 'Today' },
-              { id: 'yesterday', label: 'Yesterday' },
-              { id: 'lastWeek', label: 'Last Week' },
-              { id: 'thisMonth', label: 'This Month' },
-              { id: 'lastMonth', label: 'Last Month' },
-              { id: 'allTime', label: 'All Time' },
-              { id: 'custom', label: 'Custom' },
-            ].map((filter) => (
+      <div className="glass-panel" style={{ 
+        padding: '10px 14px', 
+        marginBottom: '20px',
+        width: '100%',
+        boxSizing: 'border-box',
+        overflow: 'visible',
+        position: 'relative',
+        zIndex: 50
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Calendar size={15} color="var(--primary)" />
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Period:</span>
+            <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
               <button
-                key={filter.id}
-                onClick={() => setDateFilter(filter.id as any)}
+                type="button"
+                onClick={() => setPeriodOpen(!periodOpen)}
+                className="portal-select"
                 style={{
-                  padding: '8px 14px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid',
-                  borderColor: dateFilter === filter.id ? 'var(--primary)' : 'rgba(212, 160, 23, 0.3)',
-                  background: dateFilter === filter.id ? 'var(--primary)' : 'rgba(212, 160, 23, 0.1)',
-                  color: dateFilter === filter.id ? '#000' : 'var(--primary)',
-                  cursor: 'pointer',
-                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  minHeight: 'auto',
                 }}
               >
-                {filter.label}
+                <span>{
+                  dateFilter === 'today' ? 'Today' :
+                  dateFilter === 'yesterday' ? 'Yesterday' :
+                  dateFilter === 'lastWeek' ? 'Last Week' :
+                  dateFilter === 'thisMonth' ? 'This Month' :
+                  dateFilter === 'lastMonth' ? 'Last Month' :
+                  dateFilter === 'allTime' ? 'All Time' :
+                  'Custom Range'
+                }</span>
+                <ChevronDown size={14} style={{ opacity: 0.7 }} />
               </button>
-            ))}
+
+              {periodOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    marginTop: 6,
+                    minWidth: '180px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+                    zIndex: 120,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {[
+                    { value: 'today', label: 'Today' },
+                    { value: 'yesterday', label: 'Yesterday' },
+                    { value: 'lastWeek', label: 'Last Week' },
+                    { value: 'thisMonth', label: 'This Month' },
+                    { value: 'lastMonth', label: 'Last Month' },
+                    { value: 'allTime', label: 'All Time' },
+                    { value: 'custom', label: 'Custom Date Range' }
+                  ].map((filter) => (
+                    <button
+                      key={filter.value}
+                      type="button"
+                      onClick={() => {
+                        setDateFilter(filter.value as any);
+                        setPeriodOpen(false);
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '10px 14px',
+                        border: 'none',
+                        borderBottom: '1px solid var(--border-light)',
+                        background: dateFilter === filter.value ? 'rgba(212,160,23,0.12)' : 'transparent',
+                        color: dateFilter === filter.value ? 'var(--primary)' : 'var(--text-main)',
+                        fontSize: 12,
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           
           {dateFilter === 'custom' && (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="date"
                 value={customDate}
                 onChange={(e) => setCustomDate(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                }}
+                className="portal-date-input"
               />
-              <span style={{ color: 'var(--text-muted)' }}>to</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>to</span>
               <input
                 type="date"
                 value={customDateTo}
                 onChange={(e) => setCustomDateTo(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                }}
+                className="portal-date-input"
               />
               <button
                 onClick={fetchDashboard}
                 disabled={!customDate}
+                className="btn-primary"
                 style={{
-                  padding: '8px 16px',
-                  background: customDate ? 'var(--primary)' : 'rgba(212, 160, 23, 0.2)',
-                  border: '1px solid var(--primary)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: customDate ? '#000' : 'var(--text-muted)',
-                  cursor: customDate ? 'pointer' : 'not-allowed',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  borderRadius: '8px',
+                  minHeight: 'auto',
                   opacity: customDate ? 1 : 0.6,
                 }}
               >
@@ -283,14 +330,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '20px',
-          marginBottom: '32px',
-        }}
-      >
+      <div className="stat-grid" style={{ marginBottom: '20px' }}>
         <StatCard
           title="Total Revenue"
           value={formatCurrency(data.totalSales)}
@@ -355,7 +395,7 @@ export default function Dashboard() {
                     <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
                 <XAxis
                   dataKey="date"
                   stroke="var(--text-muted)"
@@ -426,26 +466,12 @@ export default function Dashboard() {
                             borderRadius: '4px',
                             fontSize: '11px',
                             fontWeight: 600,
-                            textTransform: 'uppercase',
-                            background:
-                              tx.payment_method === 'cash'
-                                ? 'rgba(16,185,129,0.1)'
-                                : tx.payment_method === 'momo'
-                                ? 'rgba(139,92,246,0.1)'
-                                : tx.payment_method === 'credit'
-                                ? 'rgba(249, 115, 22, 0.1)'
-                                : 'rgba(255,255,255,0.1)',
-                            color:
-                              tx.payment_method === 'cash'
-                                ? 'var(--success)'
-                                : tx.payment_method === 'momo'
-                                ? 'var(--primary)'
-                                : tx.payment_method === 'credit'
-                                ? '#FB923C'
-                                : 'var(--text-muted)',
+                            textTransform: tx.payment_method === 'split' ? 'none' : 'uppercase',
+                            background: paymentBadgeStyle(tx.payment_method).bg,
+                            color: paymentBadgeStyle(tx.payment_method).color,
                           }}
                         >
-                          {tx.payment_method}
+                          {paymentMethodLabel(tx.payment_method, tx)}
                         </span>
                         {tx.status === 'debt' && (
                           <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#FB923C' }}>OWES</span>

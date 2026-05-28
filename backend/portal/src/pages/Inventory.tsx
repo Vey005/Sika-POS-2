@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Barcode,
 } from 'lucide-react';
+import { productToExportRow, rowsToCsv } from '../utils/inventoryImportExport';
 
 interface Product {
   id: number;
@@ -37,10 +38,21 @@ export default function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, pages: 0 });
   const [categories, setCategories] = useState<string[]>([]);
+  const [exporting, setExporting] = useState(false);
+
+  // Debounce search query changes by 400ms
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setPagination((p) => ({ ...p, page: 1 }));
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -49,7 +61,7 @@ export default function Inventory() {
         page: String(pagination.page),
         limit: String(pagination.limit),
       });
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
       if (categoryFilter) params.set('category', categoryFilter);
       if (stockFilter !== 'all') params.set('stock', stockFilter);
 
@@ -70,7 +82,7 @@ export default function Inventory() {
     } finally {
       setLoading(false);
     }
-  }, [token, pagination.page, pagination.limit, searchQuery, categoryFilter, stockFilter]);
+  }, [token, pagination.page, pagination.limit, debouncedSearchQuery, categoryFilter, stockFilter]);
 
   useEffect(() => {
     fetchProducts();
@@ -79,32 +91,62 @@ export default function Inventory() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPagination((p) => ({ ...p, page: 1 }));
-    fetchProducts();
+    setDebouncedSearchQuery(searchQuery);
   };
 
-  const handleExport = () => {
-    const csv = [
-      ['Name', 'Barcode', 'Category', 'Price', 'Cost', 'Stock', 'Status'].join(','),
-      ...products.map((p) =>
-        [
-          `"${p.name}"`,
-          p.barcode || '',
-          p.category,
-          p.unit_price,
-          p.cost_price,
-          p.stock_qty,
-          p.is_active ? 'Active' : 'Inactive',
-        ].join(',')
-      ),
-    ].join('\n');
+  const fetchAllProductsForExport = async (): Promise<Record<string, unknown>[]> => {
+    const all: Record<string, unknown>[] = [];
+    let page = 1;
+    let pages = 1;
+    const limit = 100;
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inventory-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    do {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+      });
+      if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (stockFilter !== 'all') params.set('stock', stockFilter);
+
+      const res = await fetch(getApiUrl(`${API_CONFIG.ENDPOINTS.INVENTORY}?${params}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch inventory for export');
+      const data = await res.json();
+      const batch = (data.products || []) as Record<string, unknown>[];
+      all.push(...batch);
+      pages = data.pagination?.pages || 1;
+      page += 1;
+    } while (page <= pages);
+
+    return all;
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const allProducts = await fetchAllProductsForExport();
+      if (!allProducts.length) {
+        alert('No products found to export.');
+        return;
+      }
+
+      const rows = allProducts.map((p) => productToExportRow(p));
+      const csv = '\uFEFF' + rowsToCsv(rows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sikapos_inventory_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const stockStatus = (product: Product) => {
@@ -118,117 +160,131 @@ export default function Inventory() {
 
   return (
     <div>
-      {/* Header & Filters */}
-      <div style={{ marginBottom: 'clamp(16px, 4vw, 24px)' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 'clamp(16px, 4vw, 20px)',
-            flexWrap: 'wrap',
-            gap: 'clamp(12px, 3vw, 16px)',
-          }}
-        >
-          <div>
-            <h1 style={{ fontSize: 'clamp(20px, 5vw, 28px)', marginBottom: '4px' }}>Inventory</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: 'clamp(12px, 3vw, 14px)' }}>
-              {pagination.total} products synced from your POS
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 'clamp(8px, 2vw, 12px)', flexWrap: 'wrap' }}>
-            <button onClick={handleExport} className="btn-secondary" style={{ padding: 'clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px)' }}>
-              <Download size={16} /> <span style={{ display: 'inline' }}>Export CSV</span>
-            </button>
-            <button onClick={fetchProducts} className="btn-secondary" style={{ padding: 'clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px)' }}>
-              <RefreshCw size={16} /> <span style={{ display: 'inline' }}>Refresh</span>
-            </button>
-          </div>
+      <div className="page-header">
+        <div>
+          <h1>Inventory</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+            {pagination.total} products synced from your POS
+          </p>
         </div>
-
-        {/* Filter Bar */}
-        <div className="glass-panel" style={{ padding: 'clamp(12px, 3vw, 16px)' }}>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 'clamp(8px, 2vw, 12px)', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-              <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search by name or barcode..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: 'clamp(8px, 2vw, 10px) clamp(12px, 3vw, 40px) clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px)',
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--text-main)',
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            <select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                setPagination((p) => ({ ...p, page: 1 }));
-              }}
-              style={{
-                padding: '10px 16px',
-                background: 'rgba(0,0,0,0.2)',
-                border: '1px solid var(--border-light)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-main)',
-                outline: 'none',
-                minWidth: '140px',
-              }}
-            >
-              <option value="">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={stockFilter}
-              onChange={(e) => {
-                setStockFilter(e.target.value as any);
-                setPagination((p) => ({ ...p, page: 1 }));
-              }}
-              style={{
-                padding: '10px 16px',
-                background: 'rgba(0,0,0,0.2)',
-                border: '1px solid var(--border-light)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-main)',
-                outline: 'none',
-                minWidth: '140px',
-              }}
-            >
-              <option value="all">All Stock</option>
-              <option value="low">Low Stock</option>
-              <option value="out">Out of Stock</option>
-            </select>
-
-            <button type="submit" className="btn-primary" style={{ padding: '10px 20px' }}>
-              <Filter size={16} /> Apply
-            </button>
-          </form>
+        <div className="page-actions">
+          <button onClick={handleExport} disabled={exporting} className="btn-secondary">
+            <Download size={16} />
+            {exporting ? 'Exporting…' : 'Export'}
+          </button>
+          <button onClick={fetchProducts} className="btn-secondary">
+            <RefreshCw size={16} /> Refresh
+          </button>
         </div>
       </div>
 
-      {/* Products Table */}
-      <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+      <div className="glass-panel" style={{ padding: 16, marginBottom: 16 }}>
+        <form onSubmit={handleSearch} className="filter-form">
+          <div className="filter-search">
+            <Search
+              size={18}
+              style={{
+                position: 'absolute',
+                left: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-muted)',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              type="search"
+              className="portal-input"
+              placeholder="Search name or barcode…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <select
+            className="filter-select"
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPagination((p) => ({ ...p, page: 1 }));
+            }}
+          >
+            <option value="">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+          <select
+            className="filter-select"
+            value={stockFilter}
+            onChange={(e) => {
+              setStockFilter(e.target.value as 'all' | 'low' | 'out');
+              setPagination((p) => ({ ...p, page: 1 }));
+            }}
+          >
+            <option value="all">All Stock</option>
+            <option value="low">Low Stock</option>
+            <option value="out">Out of Stock</option>
+          </select>
+          <button type="submit" className="btn-primary filter-apply">
+            <Filter size={16} /> Apply
+          </button>
+        </form>
+      </div>
+
+      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center' }}>
+          <div style={{ padding: 60, textAlign: 'center' }}>
             <RefreshCw size={32} className="spin" style={{ opacity: 0.5 }} />
           </div>
         ) : (
           <>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="portal-card-list">
+              {products.map((product) => {
+                const status = stockStatus(product);
+                const statusClass = product.stock_qty <= 0 ? 'failed' : product.stock_qty <= product.low_stock_threshold ? 'warning' : 'completed';
+                return (
+                  <div key={product.id} className="data-card animate-fade-in" style={{ marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '12px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-main)', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ padding: '2px 8px', border: '1px solid var(--border-light)', borderRadius: '6px', fontSize: '11px', fontWeight: 500 }}>{product.category}</span>
+                          {product.barcode && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)' }}>
+                              <Barcode size={13} /> {product.barcode}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`status-pill status-${statusClass}`}>
+                        {status.label}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px', fontWeight: 600 }}>Price</span>
+                        <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--primary)' }}>{formatCurrency(product.unit_price)}</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px', fontWeight: 600 }}>In Stock</span>
+                        <span style={{ fontWeight: 800, fontSize: '18px', color: 'var(--text-main)' }}>{product.stock_qty}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {products.length === 0 && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Package size={40} style={{ opacity: 0.3, marginBottom: 8 }} />
+                  <p>No products found</p>
+                </div>
+              )}
+            </div>
+
+            <div className="portal-table-wrap table-scroll">
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -315,16 +371,7 @@ export default function Inventory() {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '16px 20px',
-                borderTop: '1px solid var(--border-light)',
-              }}
-            >
+            <div className="pagination-bar">
               <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
                 Page {pagination.page} of {pagination.pages || 1}
               </span>

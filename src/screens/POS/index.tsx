@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useCartStore } from '../../store/cart';
 import { useAuthStore } from '../../store/auth';
 import ProductGrid from '../../components/pos/ProductGrid';
@@ -22,6 +23,7 @@ export function getCategoryColor(category: string): string {
 }
 
 export default function POSScreen() {
+  const location = useLocation();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(['All']);
@@ -53,11 +55,19 @@ export default function POSScreen() {
   }, [user]);
 
   const handleCharge = useCallback(async () => {
-    const { items } = useCartStore.getState();
+    const { items, refreshStockLevels } = useCartStore.getState();
     if (items.length === 0) return;
     const ok = await checkClockedIn();
-    if (ok) setShowPayment(true);
+    if (!ok) return;
+    await refreshStockLevels();
+    setShowPayment(true);
   }, [checkClockedIn]);
+
+  useEffect(() => {
+    if (location.pathname.endsWith('/pos') && useCartStore.getState().items.length > 0) {
+      void useCartStore.getState().refreshStockLevels();
+    }
+  }, [location.pathname]);
 
   // Load products
   const loadProducts = useCallback(async () => {
@@ -75,6 +85,9 @@ export default function POSScreen() {
       setProducts(prods);
       setFilteredProducts(prods);
       setCategories(['All', ...cats]);
+      if (useCartStore.getState().items.length > 0) {
+        void useCartStore.getState().refreshStockLevels();
+      }
     } finally {
       setLoading(false);
     }
@@ -166,6 +179,12 @@ export default function POSScreen() {
               placeholder="Search products or scan barcode... (Ctrl+F)"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => {
+                if (searchQuery) setSearchQuery('');
+              }}
+              onClick={() => {
+                if (searchQuery) setSearchQuery('');
+              }}
             />
             {searchQuery && (
               <button className={styles.clearSearch} onClick={() => setSearchQuery('')}>×</button>
@@ -220,7 +239,7 @@ export default function POSScreen() {
 
       {/* Clock-in warning modal */}
       {showClockInWarning && (
-        <div className={styles.clockInOverlay} onClick={() => setShowClockInWarning(false)}>
+        <div className={styles.clockInOverlay}>
           <div className={styles.clockInModal} onClick={e => e.stopPropagation()}>
             <div className={styles.clockInIcon}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

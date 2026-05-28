@@ -117,9 +117,11 @@ export default function AppUpdatePanel() {
           </button>
         )}
       </div>
-      {status === 'error' && state?.error === 'dev' && (
+      {status === 'error' && state?.error && (
         <p className={styles.hint}>
-          Run the packaged installer to test updates. Development mode cannot auto-update.
+          {state.error === 'dev'
+            ? 'Run the packaged installer to test updates. Development mode cannot auto-update.'
+            : state.error}
         </p>
       )}
     </div>

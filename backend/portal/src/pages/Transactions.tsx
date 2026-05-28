@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/auth';
 import { getApiUrl, API_CONFIG } from '../config/api';
+import { paymentMethodLabel, paymentBadgeStyle } from '../utils/paymentDisplay';
 import {
   Receipt,
   Search,
@@ -19,6 +20,8 @@ interface Transaction {
   cashier_name: string;
   customer_name?: string;
   payment_method: string;
+  split_cash?: number;
+  split_momo?: number;
   subtotal: number;
   discount_amount: number;
   total_tax: number;
@@ -130,14 +133,12 @@ export default function Transactions() {
       minute: '2-digit',
     });
 
-  const paymentBadge = (method: string) => {
-    const styles: Record<string, { bg: string; color: string }> = {
-      cash: { bg: 'rgba(16,185,129,0.1)', color: '#10B981' },
-      momo: { bg: 'rgba(139,92,246,0.1)', color: '#8B5CF6' },
-      card: { bg: 'rgba(59,130,246,0.1)', color: '#3B82F6' },
-      credit: { bg: 'rgba(249, 115, 22, 0.1)', color: '#FB923C' },
-    };
-    const style = styles[method] || { bg: 'rgba(255,255,255,0.1)', color: 'var(--text-muted)' };
+  const paymentBadge = (tx: Transaction) => {
+    const style = paymentBadgeStyle(tx.payment_method);
+    const label =
+      tx.payment_method === 'split'
+        ? paymentMethodLabel(tx.payment_method, tx)
+        : paymentMethodLabel(tx.payment_method);
     return (
       <span
         style={{
@@ -145,12 +146,15 @@ export default function Transactions() {
           borderRadius: '4px',
           fontSize: '11px',
           fontWeight: 600,
-          textTransform: 'uppercase',
+          textTransform: tx.payment_method === 'split' ? 'none' : 'uppercase',
           background: style.bg,
           color: style.color,
+          maxWidth: '220px',
+          display: 'inline-block',
+          lineHeight: 1.3,
         }}
       >
-        {method}
+        {label}
       </span>
     );
   };
@@ -181,7 +185,7 @@ export default function Transactions() {
         </div>
 
         {/* Filter Bar */}
-        <div className="glass-panel" style={{ padding: '16px' }}>
+        <div className="glass-panel" style={{ padding: '16px', overflow: 'visible', position: 'relative', zIndex: 50 }}>
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
               <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -291,6 +295,7 @@ export default function Transactions() {
               <option value="momo">Mobile Money</option>
               <option value="card">Card</option>
               <option value="credit">Credit</option>
+              <option value="split">Split (Cash + MoMo)</option>
             </select>
 
             <button type="submit" className="btn-primary" style={{ padding: '10px 20px' }}>
@@ -308,7 +313,8 @@ export default function Transactions() {
           </div>
         ) : (
           <>
-            <div style={{ overflowX: 'auto' }}>
+            {/* Desktop Table View */}
+            <div className="hide-mobile" style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -332,7 +338,7 @@ export default function Transactions() {
                       </td>
                       <td style={{ padding: '16px', fontSize: '14px' }}>{formatDate(tx.created_at)}</td>
                       <td style={{ padding: '16px' }}>{tx.cashier_name}</td>
-                      <td style={{ padding: '16px', textAlign: 'center' }}>{paymentBadge(tx.payment_method)}</td>
+                      <td style={{ padding: '16px', textAlign: 'center' }}>{paymentBadge(tx)}</td>
                       <td style={{ padding: '16px', textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
                         {formatCurrency(tx.grand_total)}
                       </td>
@@ -343,15 +349,15 @@ export default function Transactions() {
                           fontSize: '11px',
                           fontWeight: 600,
                           background: tx.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 
-                                     tx.status === 'voided' ? 'rgba(239, 68, 68, 0.1)' : 
+                                     tx.status === 'voided' || tx.status === 'reversed' ? 'rgba(239, 68, 68, 0.1)' : 
                                      tx.status === 'debt' ? 'rgba(249, 115, 22, 0.1)' :
                                      'rgba(245, 158, 11, 0.1)',
                           color: tx.status === 'completed' ? '#10B981' : 
-                                 tx.status === 'voided' ? '#EF4444' : 
+                                 tx.status === 'voided' || tx.status === 'reversed' ? '#EF4444' : 
                                  tx.status === 'debt' ? '#FB923C' :
                                  '#F59E0B',
                         }}>
-                          {tx.status === 'debt' ? 'Owes' : tx.status}
+                          {tx.status === 'debt' ? 'Owes' : tx.status === 'reversed' ? 'Reversed' : tx.status}
                         </span>
                       </td>
                       <td style={{ padding: '16px', textAlign: 'center' }}>
@@ -384,6 +390,60 @@ export default function Transactions() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="hide-desktop portal-card-list" style={{ padding: 0 }}>
+              {transactions.map((tx) => {
+                const statusClass = tx.status === 'completed' ? 'completed' : tx.status === 'voided' || tx.status === 'reversed' ? 'failed' : 'warning';
+                return (
+                  <div
+                    key={tx.id}
+                    className="data-card animate-fade-in"
+                    onClick={() => viewTransactionDetails(tx)}
+                    style={{ cursor: 'pointer', marginBottom: '6px' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ padding: '6px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                          <Receipt size={14} style={{ color: 'var(--primary)' }} />
+                        </div>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-main)', fontSize: '14px' }}>{tx.receipt_number}</span>
+                      </div>
+                      <span className={`status-pill status-${statusClass}`}>
+                        {tx.status}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px', alignItems: 'center' }}>
+                      <span>Cashier: <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>{tx.cashier_name}</strong></span>
+                      <span style={{ color: 'var(--border-strong)' }}>|</span>
+                      <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        {paymentBadge(tx)}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                          {formatDate(tx.created_at)}
+                        </span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontWeight: 800, color: 'var(--success)', fontSize: '18px', letterSpacing: '-0.02em' }}>
+                          {formatCurrency(tx.grand_total)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {transactions.length === 0 && (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Receipt size={40} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                  <p>No transactions found</p>
+                </div>
+              )}
             </div>
 
             {/* Pagination */}
@@ -473,7 +533,7 @@ export default function Transactions() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Payment:</span>
-                {paymentBadge(selectedTransaction.payment_method)}
+                {paymentBadge(selectedTransaction)}
               </div>
               {selectedTransaction.customer_name && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>

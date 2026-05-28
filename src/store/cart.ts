@@ -62,6 +62,8 @@ interface CartState {
   setOrderType: (type: 'dine-in' | 'takeaway' | 'retail') => void;
   setOrderNote: (note: string) => void;
   loadCart: (data: any) => void;
+  editItemPrice: (productId: number, saleUnit: string, newPrice: number) => void;
+  refreshStockLevels: () => Promise<void>;
 }
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -75,31 +77,30 @@ export const useCartStore = create<CartState>((set, get) => ({
   orderNote: '',
 
   subtotal: () => {
-    return round2(get().items.reduce((s, i) => s + i.unit_price * i.quantity, 0));
+    return round2(get().items.reduce((s, i) => s + (i.adjusted_price !== undefined ? i.adjusted_price : i.unit_price) * i.quantity, 0));
   },
 
   taxBreakdown: () => {
     const { items, discountAmount, discountType } = get();
-    const rawSubtotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+    const rawSubtotal = items.reduce((s, i) => s + (i.adjusted_price !== undefined ? i.adjusted_price : i.unit_price) * i.quantity, 0);
     const discAmt = discountType === 'percentage'
       ? rawSubtotal * (discountAmount / 100)
       : discountAmount;
     const discountedSubtotal = Math.max(0, rawSubtotal - discAmt);
 
-    // Only apply tax to standard items proportionally
-    const standardSubtotal = items
-      .filter(i => i.tax_category === 'standard')
-      .reduce((s, i) => s + i.unit_price * i.quantity, 0);
+    // Check the global tax enabled setting
+    const taxEnabled = useAuthStore.getState().taxEnabled;
+    if (!taxEnabled) {
+      return calcTax(0, 'exempt');
+    }
 
-    const ratio = rawSubtotal > 0 ? discountedSubtotal / rawSubtotal : 1;
-    const adjustedStandard = round2(standardSubtotal * ratio);
-
-    return calcTax(adjustedStandard, 'standard');
+    // When tax is globally enabled, apply tax to full discounted subtotal
+    return calcTax(discountedSubtotal, 'standard');
   },
 
   grandTotal: () => {
     const { items, discountAmount, discountType } = get();
-    const rawSubtotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+    const rawSubtotal = items.reduce((s, i) => s + (i.adjusted_price !== undefined ? i.adjusted_price : i.unit_price) * i.quantity, 0);
     const discAmt = discountType === 'percentage'
       ? rawSubtotal * (discountAmount / 100)
       : discountAmount;
@@ -122,7 +123,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         return {
           items: state.items.map(i =>
             i.cart_key === cartKey
-              ? { ...i, quantity: i.quantity + 1 }
+              ? { ...i, quantity: i.quantity + 1, stock_qty: product.stock_qty, is_inventory: product.is_inventory ?? i.is_inventory }
               : i
           ),
         };
@@ -216,4 +217,71 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   setOrderType: (type: 'dine-in' | 'takeaway' | 'retail') => set({ orderType: type }),
   setOrderNote: (note: string) => set({ orderNote: note }),
+  
+  editItemPrice: (productId: number, saleUnit: string, newPrice: number) => {
+    set(state => ({
+      items: state.items.map(item => {
+        if (item.product_id === productId && item.sale_unit === saleUnit) {
+          const origPrice = item.original_price ?? (item.sale_unit === 'pack' ? (item.unit_price * (item.unit_multiplier || 1)) : item.unit_price);
+          // Wait, actually the original unit_price in cart is already the pack_price if it was added as pack.
+          // Let's just use item.unit_price which represents the price at which it was added.
+          return {
+            ...item,
+            adjusted_price: newPrice,
+            original_price: item.original_price ?? item.unit_price
+          };
+        }
+        return item;
+      })
+    }));
+  },
+
+  refreshStockLevels: async () => {
+    const { items } = get();
+    if (items.length === 0 || !window.sikapos?.inventory?.getStockLevels) return;
+
+    const ids = [...new Set(items.map(i => i.product_id))];
+    try {
+      const levels = await window.sikapos.inventory.getStockLevels(ids);
+      const byId = new Map(levels.map(l => [l.id, l]));
+      set(state => ({
+        items: state.items.map(item => {
+          const live = byId.get(item.product_id);
+          if (!live) return item;
+
+          // Recalculate the correct unit_price for the sale_unit
+          const isPack = item.sale_unit === 'pack';
+          const packSize = Math.max(1, Number(live.pack_size || 1));
+          const newUnitPrice = isPack
+            ? Number(live.pack_price ?? (live.unit_price * packSize))
+            : live.unit_price;
+
+          // If the user manually edited the price AND the base price hasn't changed,
+          // keep their override. If the base price changed, reset to the new price.
+          const basePriceChanged = newUnitPrice !== item.unit_price;
+          const adjustedPrice = basePriceChanged ? undefined : item.adjusted_price;
+          const originalPrice = basePriceChanged ? undefined : item.original_price;
+
+          return {
+            ...item,
+            product_name: live.name,
+            product_barcode: live.barcode,
+            product_size: live.size,
+            category: live.category,
+            unit_price: newUnitPrice,
+            cost_price: live.cost_price,
+            stock_qty: live.stock_qty,
+            is_inventory: live.is_inventory,
+            stock_unit: (live.stock_unit as 'single' | 'pack') || item.stock_unit,
+            tax_category: live.tax_category,
+            unit_multiplier: isPack ? packSize : 1,
+            adjusted_price: adjustedPrice,
+            original_price: originalPrice,
+          };
+        }),
+      }));
+    } catch (err) {
+      console.error('[Cart] Failed to refresh stock levels:', err);
+    }
+  },
 }));

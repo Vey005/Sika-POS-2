@@ -13,7 +13,7 @@ export function registerSettingsHandlers() {
   const ALLOWED_KEYS = new Set([
     'business_name', 'business_address', 'business_phone', 'cashier_name',
     'receipt_footer', 'tin', 'pin', 'currency', 'owner_whatsapp',
-    'notification_provider', 'sms_sender_id', 'theme', 'custom_categories', 'tax_config', 'receipt_config',
+    'notification_provider', 'sms_sender_id', 'theme', 'custom_categories', 'tax_config', 'tax_enabled', 'receipt_config',
     'cashier_nav_visibility', 'expiry_alert_months_default',
   ]);
 
@@ -53,6 +53,7 @@ export function registerSettingsHandlers() {
     receipt_config?: string;
     cashier_nav_visibility?: string;
     expiry_alert_months_default?: string;
+    tax_enabled?: string;
   }) => {
     const setSetting = db.prepare(`
       INSERT INTO settings (key, value) VALUES (?, ?)
@@ -74,6 +75,7 @@ export function registerSettingsHandlers() {
       if (data.receipt_config !== undefined) setSetting.run('receipt_config', data.receipt_config);
       if (data.cashier_nav_visibility !== undefined) setSetting.run('cashier_nav_visibility', data.cashier_nav_visibility);
       if (data.expiry_alert_months_default !== undefined) setSetting.run('expiry_alert_months_default', data.expiry_alert_months_default);
+      if (data.tax_enabled !== undefined) setSetting.run('tax_enabled', data.tax_enabled);
     });
     setAll();
     return { success: true };
@@ -83,7 +85,7 @@ export function registerSettingsHandlers() {
     // Deliberately exclude sms_api_key — sensitive credentials should not be sent to the renderer
     const rows = db.prepare(`
       SELECT key, value FROM settings
-      WHERE key IN ('business_name','business_address','business_phone','cashier_name','receipt_footer','tin','pin','currency','owner_whatsapp','notification_provider','sms_sender_id','custom_categories','tax_config','receipt_config','cashier_nav_visibility','expiry_alert_months_default')
+      WHERE key IN ('business_name','business_address','business_phone','cashier_name','receipt_footer','tin','pin','currency','owner_whatsapp','notification_provider','sms_sender_id','custom_categories','tax_config','tax_enabled','receipt_config','cashier_nav_visibility','expiry_alert_months_default')
     `).all() as Array<{ key: string; value: string }>;
     const result: Record<string, string> = {};
     for (const row of rows) result[row.key] = row.value;

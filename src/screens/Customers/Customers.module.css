@@ -330,5 +330,3 @@
 .txRef { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-primary); }
 .txDate { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
 .txAmount { font-family: var(--font-mono); font-size: 14px; color: var(--color-gold); }
-
-/* =====================================================
